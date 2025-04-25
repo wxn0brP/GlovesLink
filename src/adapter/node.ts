@@ -11,7 +11,7 @@ export class GlovesLinkWS {
     onError(cb: any) { this.ws.on("error", cb); }
     send(data: any) { this.ws.send(data); }
     close() { this.ws.close(); }
-    fixUrl(url: string) {
+    static fixUrl(url: string) {
         if (!url.startsWith("ws")) throw new Error("URL must start with ws:// or wss://");
         return url;
     }

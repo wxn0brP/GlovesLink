@@ -36,7 +36,7 @@ export class GlovesLinkClient {
             ...opts
         }
 
-        this.url = this.ws.fixUrl(url);
+        this.url = GlovesLinkWS.fixUrl(url);
 
         this._connect();
     }
