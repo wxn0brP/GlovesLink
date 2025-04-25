@@ -1,4 +1,4 @@
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import http from "http";
 
 export interface GLS_Opts {
@@ -17,26 +17,20 @@ export interface GLS_AckEvent {
     data: any[];
 }
 
-export class GlovesLinkServer {
-    public handlers: { [key: string]: Function };
-    public wss: any;
-    public ackCallbacks: Map<number, Function> = new Map();
-    public ackIdCounter = 1;
-    public logs = false;
+export class GLSocket {
+    id: string;
+    ackIdCounter = 1;
+    ackCallbacks: Map<number, Function> = new Map();
+    logs = false;
+    handlers: { [key: string]: Function };
 
-    constructor(opts: Partial<GLS_Opts>) {
-        const { server } = opts;
+    constructor(public ws: WebSocket) {
+        this.id = Math.random().toString(36).substring(7);
         this.handlers = {};
-        if (opts.logs) this.logs = true;
-
-        this.wss = new WebSocket.Server({ server });
-
-        this.wss.on("connection", (ws: WebSocket) => {
-            ws.on("message", (raw: string) => this._handle(ws, raw));
-        });
+        this.ws.on("message", (raw: string) => this._handle(raw));
     }
 
-    _handle(ws: WebSocket, raw: string) {
+    _handle(raw: string) {
         let msg: GLS_DataEvent | GLS_AckEvent;
 
         try {
@@ -57,7 +51,7 @@ export class GlovesLinkServer {
         }
 
         const { evt, data, ackI } = msg;
-        if (!evt || !Array.isArray(data)) return;
+        if (!evt || (data && !Array.isArray(data))) return;
 
         if (Array.isArray(ackI)) {
             for (let i = 0; i < ackI.length; i++) {
@@ -66,37 +60,60 @@ export class GlovesLinkServer {
 
                 const ackId = data[ackIndex];
                 data[ackIndex] = (...res: any) => {
-                    ws.send(JSON.stringify({ ack: ackId, data: res }));
+                    this.ws.send(JSON.stringify({ ack: ackId, data: res }));
                 }
             }
         }
 
         if (!this.handlers[evt]) return;
 
-        this.handlers[evt](ws, ...data);
+        this.handlers[evt](...data);
     }
 
-    on(evt: string, handler: (ws: WebSocket, ...args: any[]) => void | any) {
+    on(evt: string, handler: (...args: any[]) => void | any) {
         this.handlers[evt] = handler;
     }
-
 
     emit(evt: string, ...args: any[]) {
         const ackI = args.map((data, i) => {
             if (typeof data === "function") return i;
-        }).filter(Boolean);
+        }).filter(i => i !== undefined);
 
         for (let i = 0; i < ackI.length; i++) {
             const ackIndex = ackI[i];
             const ackId = this.ackIdCounter++;
-            args[ackIndex] = ackId;
             this.ackCallbacks.set(ackId, args[ackIndex]);
+            args[ackIndex] = ackId;
         }
 
-        this.wss.send(JSON.stringify({
+        this.ws.send(JSON.stringify({
             evt,
-            data: args,
-            ackI
+            data: args || undefined,
+            ackI: ackI.length ? ackI : undefined
         }));
+    }
+}
+
+export class GlovesLinkServer {
+    public wss: WebSocketServer;
+    private onConnectEvent: (ws: GLSocket) => void;
+    public logs = false;
+
+    constructor(opts: Partial<GLS_Opts>) {
+        const { server } = opts;
+        if (opts.logs) this.logs = true;
+
+        this.wss = new WebSocketServer({ server });
+
+        this.wss.on("connection", (wsRaw: WebSocket) => {
+            const ws = new GLSocket(wsRaw);
+            ws.logs = this.logs;
+
+            this.onConnectEvent(ws);
+        });
+    }
+
+    onConnect(handler: (ws: GLSocket) => void) {
+        this.onConnectEvent = handler;
     }
 }

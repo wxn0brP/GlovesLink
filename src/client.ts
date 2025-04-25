@@ -18,13 +18,14 @@ export interface GLC_AckEvent {
 }
 
 export class GlovesLinkClient {
-    ws: GlovesLinkWS;
-    ackIdCounter: number;
-    ackCallbacks: Map<number, Function>;
-    handlers: { [key: string]: Function };
-    opts: GLC_Opts;
+    public ws: GlovesLinkWS;
+    public ackIdCounter: number;
+    public ackCallbacks: Map<number, Function>;
+    public handlers: { [key: string]: Function };
+    public opts: GLC_Opts;
+    public url: string;
 
-    constructor(public url: string, opts: Partial<GLC_Opts> = {}) {
+    constructor(url: string, opts: Partial<GLC_Opts> = {}) {
         this.ackIdCounter = 1;
         this.ackCallbacks = new Map();
         this.handlers = {};
@@ -35,6 +36,8 @@ export class GlovesLinkClient {
             ...opts
         }
 
+        this.url = this.ws.fixUrl(url);
+
         this._connect();
     }
 
@@ -42,7 +45,8 @@ export class GlovesLinkClient {
         this.ws = new GlovesLinkWS(this.url);
 
         this.ws.onOpen(() => {
-            if (this.opts.logs) console.log("[ws] Connected ");
+            if (this.opts.logs) console.log("[ws] Connected");
+            this.handlers.connect?.(this.ws);
         });
 
         this.ws.onMessage((raw: string) => {
@@ -66,7 +70,7 @@ export class GlovesLinkClient {
             }
 
             const { evt, data, ackI } = msg;
-            if (!evt || !Array.isArray(data)) return;
+            if (!evt || (data && !Array.isArray(data))) return;
 
             if (Array.isArray(ackI)) {
                 for (let i = 0; i < ackI.length; i++) {
@@ -91,6 +95,7 @@ export class GlovesLinkClient {
 
         this.ws.onClose(() => {
             if (this.opts.logs) console.log("[ws] Disconnected");
+            this.handlers.disconnect?.(this.ws);
 
             if (this.opts.reConnect) {
                 setTimeout(() => {
@@ -107,19 +112,19 @@ export class GlovesLinkClient {
     emit(evt: string, ...args: any[]) {
         const ackI = args.map((data, i) => {
             if (typeof data === "function") return i;
-        }).filter(Boolean);
+        }).filter(i => i !== undefined);
 
         for (let i = 0; i < ackI.length; i++) {
             const ackIndex = ackI[i];
             const ackId = this.ackIdCounter++;
-            args[ackIndex] = ackId;
             this.ackCallbacks.set(ackId, args[ackIndex]);
+            args[ackIndex] = ackId;
         }
 
         this.ws.send(JSON.stringify({
             evt,
-            data: args,
-            ackI
+            data: args || undefined,
+            ackI: ackI.length ? ackI : undefined
         }));
     }
 }
