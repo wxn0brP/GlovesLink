@@ -10,7 +10,7 @@ export class GlovesLinkWS {
     send(data: any) { this.ws.send(data); }
     close() { this.ws.close(); }
     static fixUrl(url: string) {
-        if (url.startsWith("/")) url = window.location.origin + url;
+        if (url.startsWith("/")) url = window.location.host + url;
         if (!url.startsWith("ws://") && !url.startsWith("wss://")){ 
             const protocol = window?.location?.protocol === "https:" ? "wss://" : "ws://";
             url = protocol + url;
