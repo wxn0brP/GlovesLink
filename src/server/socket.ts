@@ -1,22 +1,6 @@
-import { WebSocket, WebSocketServer } from "ws";
-import http from "http";
-import * as roomUtils from "./server/room";
-
-export interface GLS_Opts {
-    server: http.Server;
-    logs: boolean;
-}
-
-export interface GLS_DataEvent {
-    evt: string;
-    data: any[];
-    ackI?: number[];
-}
-
-export interface GLS_AckEvent {
-    ack: number;
-    data: any[];
-}
+import { WebSocket } from "ws";
+import * as roomUtils from "./room";
+import { Server_AckEvent, Server_DataEvent } from "./types";
 
 export class GLSocket {
     id: string;
@@ -25,14 +9,14 @@ export class GLSocket {
     logs = false;
     handlers: { [key: string]: Function };
 
-    constructor(public ws: WebSocket) {
-        this.id = Math.random().toString(36).substring(7);
+    constructor(public ws: WebSocket, id?: string) {
+        this.id = id || Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
         this.handlers = {};
         this.ws.on("message", (raw: string) => this._handle(raw));
     }
 
     _handle(raw: string) {
-        let msg: GLS_DataEvent | GLS_AckEvent;
+        let msg: Server_DataEvent | Server_AckEvent;
 
         try {
             msg = JSON.parse(raw);
@@ -105,32 +89,4 @@ export class GLSocket {
     leaveAllRooms() {
         roomUtils.leaveAllRooms(this);
     }
-}
-
-export class GlovesLinkServer {
-    public wss: WebSocketServer;
-    private onConnectEvent: (ws: GLSocket) => void;
-    public logs = false;
-
-    constructor(opts: Partial<GLS_Opts>) {
-        const { server } = opts;
-        if (opts.logs) this.logs = true;
-
-        this.wss = new WebSocketServer({ server });
-
-        this.wss.on("connection", (wsRaw: WebSocket) => {
-            const ws = new GLSocket(wsRaw);
-            ws.logs = this.logs;
-
-            this.onConnectEvent(ws);
-        });
-    }
-
-    onConnect(handler: (ws: GLSocket) => void) {
-        this.onConnectEvent = handler;
-    }
-}
-
-export {
-    roomUtils
 }

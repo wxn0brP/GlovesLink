@@ -4,6 +4,7 @@ export interface GLC_Opts {
     reConnect: boolean,
     reConnectInterval: number,
     logs: boolean;
+    token: string;
 }
 
 export interface GLC_DataEvent {
@@ -33,16 +34,20 @@ export class GlovesLinkClient {
             logs: false,
             reConnect: true,
             reConnectInterval: 1000,
+            token: null,
             ...opts
         }
 
         this.url = GlovesLinkWS.fixUrl(url);
+        if (this.opts.token) this.url += `?token=${this.opts.token}`;
 
         this._connect();
     }
 
     _connect() {
-        this.ws = new GlovesLinkWS(this.url);
+        const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+        const url = this.url.includes("?") ? `${this.url}&id=${id}` : `${this.url}?id=${id}`;
+        this.ws = new GlovesLinkWS(url);
 
         this.ws.onOpen(() => {
             if (this.opts.logs) console.log("[ws] Connected");
@@ -93,15 +98,30 @@ export class GlovesLinkClient {
             handler(...data);
         });
 
-        this.ws.onClose(() => {
-            if (this.opts.logs) console.log("[ws] Disconnected");
-            this.handlers.disconnect?.(this.ws);
+        this.ws.onClose((event: CloseEvent) => {
+            if (this.opts.logs) console.log("[ws] Disconnected", event);
+            this.handlers.disconnect?.(this.ws, event);
 
-            if (this.opts.reConnect) {
-                setTimeout(() => {
-                    this._connect();
-                }, this.opts.reConnectInterval);
+            if (event.code === 1006) {
+                if (this.opts.logs) console.log("[ws] Connection closed by server");
+                fetch("/gloves-link/status?id=" + id).then(res => res.json()).then(data => {
+                    if (data.err) {
+                        if (this.opts.logs) console.log("[ws] Status error", data.msg);
+                        return;
+                    }
+                    const status = data.status as number;
+                    if (this.opts.logs) console.log("[ws] Status", status);
+                    if (status === 401) this.handlers.unauthorized?.(this.ws);
+                    else if (status === 403) this.handlers.forbidden?.(this.ws);
+                    else if (status === 500) this.handlers.serverError?.(this.ws);
+                })
+                return;
             }
+            if (!this.opts.reConnect) return;
+
+            setTimeout(() => {
+                this._connect();
+            }, this.opts.reConnectInterval);
         });
     }
 
@@ -127,4 +147,10 @@ export class GlovesLinkClient {
             ackI: ackI.length ? ackI : undefined
         }));
     }
+}
+
+export {
+    GlovesLinkClient as default,
+    GlovesLinkClient as GLC,
+    GlovesLinkClient as client,
 }

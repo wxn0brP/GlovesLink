@@ -1,4 +1,4 @@
-import { GLSocket } from "../server";
+import { GLSocket } from "./socket";
 
 export const rooms = new Map<string, Set<GLSocket>>();
 
