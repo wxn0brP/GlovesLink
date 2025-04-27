@@ -1,5 +1,6 @@
 import { WebSocket, WebSocketServer } from "ws";
 import http from "http";
+import * as roomUtils from "./server/room";
 
 export interface GLS_Opts {
     server: http.Server;
@@ -92,6 +93,18 @@ export class GLSocket {
             ackI: ackI.length ? ackI : undefined
         }));
     }
+
+    joinRoom(roomName: string) {
+        roomUtils.joinRoom(this, roomName);
+    }
+
+    leaveRoom(roomName: string) {
+        roomUtils.leaveRoom(this, roomName);
+    }
+
+    leaveAllRooms() {
+        roomUtils.leaveAllRooms(this);
+    }
 }
 
 export class GlovesLinkServer {
@@ -116,4 +129,8 @@ export class GlovesLinkServer {
     onConnect(handler: (ws: GLSocket) => void) {
         this.onConnectEvent = handler;
     }
+}
+
+export {
+    roomUtils
 }
