@@ -10,6 +10,7 @@ export class GlovesLinkServer {
     public logs = false;
     public opts: Server_Opts;
     public initStatusTemp: { [key: string]: number } = {}
+    public clients: Set<GLSocket> = new Set();
 
     constructor(opts: Partial<Server_Opts>) {
         this.opts = {
@@ -48,7 +49,14 @@ export class GlovesLinkServer {
                     const glSocket = new GLSocket(ws);
                     glSocket.logs = this.logs;
 
+                    this.clients.add(glSocket);
                     this.onConnectEvent(glSocket);
+
+                    ws.on("close", () => {
+                        glSocket.leaveAllRooms();
+                        glSocket.handlers?.disconnect?.();
+                        this.clients.delete(glSocket);
+                    });
                 });
             } catch (err) {
                 if (process.env.NODE_ENV === "development") console.error("[GlovesLinkServer]", err);

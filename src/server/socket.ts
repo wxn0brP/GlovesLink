@@ -3,11 +3,11 @@ import * as roomUtils from "./room";
 import { Server_AckEvent, Server_DataEvent } from "./types";
 
 export class GLSocket {
-    id: string;
+    public id: string;
     ackIdCounter = 1;
     ackCallbacks: Map<number, Function> = new Map();
     logs = false;
-    handlers: { [key: string]: Function };
+    public handlers: { [key: string]: Function };
 
     constructor(public ws: WebSocket, id?: string) {
         this.id = id || Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
