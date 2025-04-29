@@ -1,8 +1,8 @@
 {
     "name": "@wxn0brp/gloves-link",
     "version": "0.0.1",
-    "main": "dist/server.js",
-    "types": "dist/server.d.ts",
+    "main": "dist/server/index.js",
+    "types": "dist/server/index.d.ts",
     "author": "wxn0brP",
     "license": "MIT",
     "private": true,
