@@ -1,0 +1,11 @@
+import { GLSocket } from "./socket.js";
+export declare const rooms: Map<string, Set<GLSocket>>;
+export declare function joinRoom(socket: GLSocket, roomName: string): void;
+export declare function leaveRoom(socket: GLSocket, roomName: string): void;
+export declare function leaveAllRooms(socket: GLSocket): void;
+export declare function sendMessageToRoom(roomName: string, evtName: string, ...data: any): boolean;
+export declare function getClientsInRoom(roomName: string): Set<GLSocket>;
+export declare function isClientInRoom(socket: GLSocket, roomName: string): boolean;
+export declare function getAllRooms(): string[];
+export declare function getRoomSize(roomName: string): number;
+export declare function getClientRooms(socket: GLSocket): string[];
