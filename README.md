@@ -18,13 +18,13 @@ GlovesLink is a WebSocket communication library designed for seamless interactio
 ## Installation
 
 ```bash
-yarn add github:wxn0brp/GlovesLink
+yarn add github:wxn0brp/GlovesLink#dist
 ```
 
 ### Optional Dependencies
 [FalconFrame](https://github.com/wxn0brP/FalconFrame) for http server
 ```bash
-yarn add github:wxn0brp/FalconFrame
+yarn add @wxn0brp/falcon-frame
 ```
 
 ## Usage
