@@ -1,8 +1,8 @@
 {
     "name": "@wxn0brp/gloves-link",
     "version": "0.0.2",
-    "main": "dist/server/index.js",
-    "types": "dist/server/index.d.ts",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
     "author": "wxn0brP",
     "license": "MIT",
     "private": true,
@@ -41,6 +41,11 @@
             "types": "./dist/client.d.ts",
             "import": "./dist/client.js",
             "default": "./dist/client.js"
+        },
+        "./*": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
         }
     }
 }

@@ -106,5 +106,6 @@ export class GlovesLinkServer {
 }
 
 export {
-    roomUtils
+    roomUtils,
+    GLSocket
 }
