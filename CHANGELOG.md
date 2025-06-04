@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.3](https://github.com/wxn0brP/GlovesLink/compare/v0.0.2...v0.0.3) (2025-06-04)
+
+
+### Features
+
+* add exports ([0cd8a39](https://github.com/wxn0brP/GlovesLink/commit/0cd8a3969e0186f7cdbe48a9b65a2a46cc7d14ab))
+
 ### 0.0.2 (2025-05-24)
 
 
