@@ -1,6 +1,7 @@
 import { WebSocket } from "ws";
-import * as roomUtils from "./room";
 import { Server_AckEvent, Server_DataEvent } from "./types";
+import { GlovesLinkServer } from ".";
+import { joinSocketToRoom, leaveAllSocketFromRoom, leaveSocketFromRoom } from "./room";
 
 export class GLSocket {
     public id: string;
@@ -8,8 +9,13 @@ export class GLSocket {
     ackCallbacks: Map<number, Function> = new Map();
     logs = false;
     public handlers: { [key: string]: Function };
+    public rooms: Set<string> = new Set();
 
-    constructor(public ws: WebSocket, id?: string) {
+    constructor(
+        public ws: WebSocket,
+        public server: GlovesLinkServer,
+        id?: string
+    ) {
         this.id = id || Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
         this.handlers = {};
         this.ws.on("message", (raw: string) => this._handle(raw));
@@ -50,9 +56,7 @@ export class GLSocket {
             }
         }
 
-        if (!this.handlers[evt]) return;
-
-        this.handlers[evt](...data);
+        this.handlers[evt]?.(...data);
     }
 
     on(evt: string, handler: (...args: any[]) => void | any) {
@@ -78,15 +82,26 @@ export class GLSocket {
         }));
     }
 
+    send(evt: string, ...args: any[]) {
+        return this.emit(evt, ...args);
+    }
+
+    close() {
+        this.ws.close();
+    }
+
     joinRoom(roomName: string) {
-        roomUtils.joinRoom(this, roomName);
+        joinSocketToRoom(this, roomName);
+        this.rooms.add(roomName);
     }
 
     leaveRoom(roomName: string) {
-        roomUtils.leaveRoom(this, roomName);
+        leaveSocketFromRoom(this, roomName);
+        this.rooms.delete(roomName);
     }
 
     leaveAllRooms() {
-        roomUtils.leaveAllRooms(this);
+        leaveAllSocketFromRoom(this);
+        this.rooms.clear();
     }
 }

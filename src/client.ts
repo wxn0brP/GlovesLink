@@ -54,6 +54,11 @@ export class GlovesLinkClient {
             this.handlers.connect?.(this.ws);
         });
 
+        this.ws.onError((...err: any) => {
+            if (this.opts.logs) console.warn("[ws] Error:", err);
+            this.handlers.error?.(...err);
+        });
+
         this.ws.onMessage((raw: string) => {
             let msg: GLC_DataEvent | GLC_AckEvent;
 
@@ -125,7 +130,7 @@ export class GlovesLinkClient {
         });
     }
 
-    on(evt: string, handler: (ws: WebSocket, ...args: any[]) => void | any) {
+    on(evt: string, handler: (...args: any[]) => void | any) {
         this.handlers[evt] = handler;
     }
 
@@ -146,6 +151,14 @@ export class GlovesLinkClient {
             data: args || undefined,
             ackI: ackI.length ? ackI : undefined
         }));
+    }
+
+    send(evt: string, ...args: any[]) {
+        return this.emit(evt, ...args);
+    }
+
+    close() {
+        this.ws.close();
     }
 }
 

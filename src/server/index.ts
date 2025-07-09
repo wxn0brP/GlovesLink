@@ -1,8 +1,8 @@
 import { WebSocketServer } from "ws";
-import * as roomUtils from "./room";
 import { Server_Opts } from "./types";
 import { GLSocket } from "./socket";
 import FalconFrame from "@wxn0brp/falcon-frame";
+import { Room, Rooms } from "./room";
 
 export class GlovesLinkServer {
     public wss: WebSocketServer;
@@ -10,7 +10,8 @@ export class GlovesLinkServer {
     public logs = false;
     public opts: Server_Opts;
     public initStatusTemp: { [key: string]: number } = {}
-    public clients: Set<GLSocket> = new Set();
+    public rooms: Rooms = new Map();
+    public globalRoom: Room = new Room();
 
     constructor(opts: Partial<Server_Opts>) {
         this.opts = {
@@ -20,7 +21,7 @@ export class GlovesLinkServer {
             ...opts
         }
 
-        if (!this.opts.server) {
+        if (!this.opts?.server) {
             throw new Error("Server is not provided");
         }
 
@@ -46,16 +47,16 @@ export class GlovesLinkServer {
                 }
 
                 this.wss.handleUpgrade(request, socket, head, (ws) => {
-                    const glSocket = new GLSocket(ws);
+                    const glSocket = new GLSocket(ws, this);
                     glSocket.logs = this.logs;
 
-                    this.clients.add(glSocket);
+                    this.globalRoom.join(glSocket);
                     this.onConnectEvent(glSocket);
 
                     ws.on("close", () => {
-                        glSocket.leaveAllRooms();
                         glSocket.handlers?.disconnect?.();
-                        this.clients.delete(glSocket);
+                        glSocket.leaveAllRooms();
+                        this.globalRoom.leave(glSocket);
                     });
                 });
             } catch (err) {
@@ -78,6 +79,24 @@ export class GlovesLinkServer {
 
     onConnect(handler: (ws: GLSocket) => void) {
         this.onConnectEvent = handler;
+    }
+
+    broadcast(event: string, ...args: any[]) {
+        this.globalRoom.emit(event, ...args);
+    }
+
+    broadcastRoom(roomName: string, event: string, ...args: any[]) {
+        const room = this.room(roomName);
+        if (!room) return;
+        room.emit(event, ...args);
+    }
+
+    broadcastWithoutSelf(socket: GLSocket, event: string, ...args: any[]) {
+        this.globalRoom.emitWithoutSelf(socket, event, ...args);
+    }
+
+    room(name: string): Room {
+        return this.rooms.get(name) || this.rooms.set(name, new Room()).get(name);
     }
 
     falconFrame(app: FalconFrame) {
@@ -106,6 +125,5 @@ export class GlovesLinkServer {
 }
 
 export {
-    roomUtils,
     GLSocket
 }
