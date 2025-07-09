@@ -15,4 +15,5 @@ jobs:
     with:
       scriptsHandling: "remove-all"
       branch: "dist-server"
+      path: "server"
       out: ".."
