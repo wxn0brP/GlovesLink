@@ -1,4 +1,4 @@
-import { GlovesLinkWS } from "#adapter";
+import WebSocketImpl from "./universal";
 
 export interface GLC_Opts {
     reConnect: boolean,
@@ -19,12 +19,12 @@ export interface GLC_AckEvent {
 }
 
 export class GlovesLinkClient {
-    public ws: GlovesLinkWS;
+    public ws: WebSocket;
     public ackIdCounter: number;
     public ackCallbacks: Map<number, Function>;
     public handlers: { [key: string]: Function };
     public opts: GLC_Opts;
-    public url: string;
+    public url: URL;
 
     constructor(url: string, opts: Partial<GLC_Opts> = {}) {
         this.ackIdCounter = 1;
@@ -38,28 +38,29 @@ export class GlovesLinkClient {
             ...opts
         }
 
-        this.url = GlovesLinkWS.fixUrl(url);
-        if (this.opts.token) this.url += `?token=${this.opts.token}`;
+        this.url = new URL(url, window ? window.location.href.replace("http", "ws") : "ws://localhost");
+        if (this.opts.token) this.url.searchParams.set("token", this.opts.token);
 
         this._connect();
     }
 
     _connect() {
         const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
-        const url = this.url.includes("?") ? `${this.url}&id=${id}` : `${this.url}?id=${id}`;
-        this.ws = new GlovesLinkWS(url);
+        this.url.searchParams.set("id", id);
+        this.ws = new WebSocketImpl(this.url.href);
 
-        this.ws.onOpen(() => {
+        this.ws.onopen = () => {
             if (this.opts.logs) console.log("[ws] Connected");
             this.handlers.connect?.(this.ws);
-        });
+        }
 
-        this.ws.onError((...err: any) => {
+        this.ws.onerror = (...err: any) => {
             if (this.opts.logs) console.warn("[ws] Error:", err);
             this.handlers.error?.(...err);
-        });
+        }
 
-        this.ws.onMessage((raw: string) => {
+        this.ws.onmessage = (_data) => {
+            const raw = _data?.data?.toString() || _data?.toString() || "";
             let msg: GLC_DataEvent | GLC_AckEvent;
 
             try {
@@ -101,9 +102,9 @@ export class GlovesLinkClient {
             if (!handler) return;
 
             handler(...data);
-        });
+        }
 
-        this.ws.onClose((event: CloseEvent) => {
+        this.ws.onclose = (event: CloseEvent) => {
             if (this.opts.logs) console.log("[ws] Disconnected", event);
             this.handlers.disconnect?.(this.ws, event);
 
@@ -127,7 +128,7 @@ export class GlovesLinkClient {
             setTimeout(() => {
                 this._connect();
             }, this.opts.reConnectInterval);
-        });
+        }
     }
 
     on(evt: string, handler: (...args: any[]) => void | any) {

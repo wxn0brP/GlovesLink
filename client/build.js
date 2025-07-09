@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 
 esbuild.build({
-    entryPoints: ["./src/client.ts"],
+    entryPoints: ["./src/index.ts"],
     bundle: true,
     outfile: "./dist/GlovesLinkClient.js",
     platform: "browser",
@@ -9,9 +9,7 @@ esbuild.build({
     sourcemap: true,
     minify: true,
     metafile: true,
-    alias: {
-        "#adapter": "./dist/adapter/browser.js"
-    }
+    external: ["ws"]
 }).then(() => {
     console.log("Build complete");
 }).catch(err => {

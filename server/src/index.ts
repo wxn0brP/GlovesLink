@@ -1,7 +1,7 @@
 import { WebSocketServer } from "ws";
 import { Server_Opts } from "./types";
 import { GLSocket } from "./socket";
-import FalconFrame from "@wxn0brp/falcon-frame";
+import FalconFrame, { Router } from "@wxn0brp/falcon-frame";
 import { Room, Rooms } from "./room";
 
 export class GlovesLinkServer {
@@ -99,15 +99,13 @@ export class GlovesLinkServer {
         return this.rooms.get(name) || this.rooms.set(name, new Room()).get(name);
     }
 
-    falconFrame(app: FalconFrame) {
-        const __dirname = import.meta.dirname;
-        app.get("/gloves-link/client.js", (req, res) => {
-            res.sendFile(__dirname + "/../GlovesLinkClient.js");
-        });
-        app.get("/gloves-link/client.js.map", (req, res) => {
-            res.sendFile(__dirname + "/../GlovesLinkClient.js.map");
-        });
-        app.get("/gloves-link/status", (req, res) => {
+    falconFrame(app: FalconFrame, clientDir?: string) {
+        clientDir = clientDir || "node_modules/@wxn0brp/gloves-link-client/dist/";
+        const router = new Router();
+        app.use("/gloves-link", router);
+
+        router.static("/", clientDir);
+        router.get("/status", (req, res) => {
             const id = req.query.id as string;
             if (!id) {
                 res.status(400).json({ err: true, msg: "No id provided" });
@@ -120,6 +118,10 @@ export class GlovesLinkServer {
             }
             res.json({ status });
             delete this.initStatusTemp[id];
+        });
+        router.get("/*", (req, res) => {
+            res.redirect("/gloves-link/GlovesLinkClient.js");
+            res.end();
         });
     }
 }
