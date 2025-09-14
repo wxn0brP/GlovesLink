@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    uses: wxn0brP/workflow-dist/.github/workflows/build-ts.yml@main
+    uses: wxn0brP/workflow-dist/.github/workflows/build-ts-new.yml@main
     with:
       scriptsHandling: "remove-all"
       branch: "dist-client"
