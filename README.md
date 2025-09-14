@@ -18,7 +18,8 @@ GlovesLink is a WebSocket communication library designed for seamless interactio
 ## Installation
 
 ```bash
-yarn add github:wxn0brp/GlovesLink#dist
+yarn add github:wxn0brp/GlovesLink#dist-server
+yarn add github:wxn0brp/GlovesLink#dist-client
 ```
 
 ### Optional Dependencies
@@ -85,50 +86,14 @@ client.on('response', (message) => {
 client.emit('exampleEvent', { hello: 'world' });
 ```
 
-## API
+## API Reference
 
-### `GlovesLinkClient`
+For detailed API documentation, see:
 
-**Constructor Options:**
-```typescript
-{
-    reConnect?: boolean; // Whether to automatically reconnect after disconnection
-    reConnectInterval?: number; // Reconnection interval in milliseconds
-    logs?: boolean; // Enable or disable logging
-    token?: string; // Authentication token
-}
-```
-
-**Methods:**
-- `on(event: string, handler: Function)`: Listen for events.
-- `emit(event: string, ...args: any[])`: Emit events with optional data.
-- `joinRoom(roomName: string)`: Join a specific room.
-- `leaveRoom(roomName: string)`: Leave a specific room.
-- `leaveAllRooms()`: Leave all joined rooms.
-
-### `GlovesLinkServer`
-
-**Constructor Options:**
-```typescript
-{
-    server: http.Server; // HTTP server instance
-    logs?: boolean; // Enable or disable logging
-    authFn?: (data: Server_Auth_Opts) => boolean | Promise<boolean>; // Authentication function (default: () => true)
-}
-```
-
-**Methods:**
-- `onConnect(handler: (socket: GLSocket) => void)`: Handle new connections.
-- `falconFrame(app: FalconFrame)`: Integrate with FalconFrame for additional functionality.
-
-### `GLSocket` (Server-Side Socket)
-
-**Methods:**
-- `on(event: string, handler: Function)`: Listen for events.
-- `emit(event: string, ...args: any[])`: Emit events with optional data.
-- `joinRoom(roomName: string)`: Join a specific room.
-- `leaveRoom(roomName: string)`: Leave a specific room.
-- `leaveAllRooms()`: Leave all joined rooms.
+- [Client API](./docs/client.md)
+- [Server API](./docs/server.md)
+- [Socket API](./docs/socket.md)
+- [Room API](./docs/room.md)
 
 ## License
 
