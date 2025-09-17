@@ -11,7 +11,7 @@
         "build": "tsc && tsc-alias && node build.js"
     },
     "devDependencies": {
-        "@types/node": "^22.12.0",
+        "@types/node": "^24.0.0",
         "@types/ws": "^8.18.1",
         "esbuild": "^0.25.3",
         "tsc-alias": "^1.8.10",
