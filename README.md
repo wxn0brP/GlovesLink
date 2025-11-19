@@ -2,6 +2,10 @@
 
 GlovesLink is a WebSocket communication library designed for seamless interaction between clients and servers.
 
+[Main repo](https://github.com/wxn0brP/GlovesLink) |
+[Client repo](https://github.com/wxn0brP/GlovesLink-client) |
+[Server repo](https://github.com/wxn0brP/GlovesLink-server)
+
 ## Features
 
 ### General
