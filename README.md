@@ -22,71 +22,7 @@ GlovesLink is a WebSocket communication library designed for seamless interactio
 ## Installation
 
 ```bash
-npm i @wxn0brp/gloves-link-server @wxn0brp/gloves-link-client
-```
-
-### Optional Dependencies
-[FalconFrame](https://github.com/wxn0brP/FalconFrame) for http server
-```bash
-npm i @wxn0brp/falcon-frame
-```
-
-## Usage
-
-### Server-Side (with FalconFrame)
-
-```typescript
-import { GlovesLinkServer } from '@wxn0brp/gloves-link/server';
-import { FalconFrame } from '@wxn0brp/falcon-frame';
-
-const app = new FalconFrame();
-const httpServer = app.listen(3000);
-
-const glovesLink = new GlovesLinkServer({
-    server: httpServer,
-    logs: true,
-    authFn: async ({ headers, url, token }) => {
-        // Implement your authentication logic here
-        return true;
-    }
-});
-glovesLink.falconFrame(app);
-
-glovesLink.onConnect((socket) => {
-    console.log('New connection:', socket.id);
-
-    socket.on('exampleEvent', (data) => {
-        console.log('Received data:', data);
-        socket.emit('response', 'Hello from server');
-    });
-});
-```
-
-### Client-Side
-
-```typescript
-import GlovesLinkClient from '@wxn0brp/gloves-link/client';
-//or browser
-import GlovesLinkClient from 'path/to/your/GlovesLinkClient.js';
-// if you use falcon-frame
-import GlovesLinkClient from '/gloves-link/client';
-
-const client = new GlovesLinkClient('ws://example.com', {
-    reConnect: true,
-    reConnectInterval: 5000,
-    logs: true,
-    token: 'your-auth-token'
-});
-
-client.on('connect', () => {
-    console.log('Connected to server');
-});
-
-client.on('response', (message) => {
-    console.log('Response from server:', message);
-});
-
-client.emit('exampleEvent', { hello: 'world' });
+npm i @wxn0brp/gloves-link-server @wxn0brp/gloves-link-client @wxn0brp/falcon-frame
 ```
 
 ## API Reference
