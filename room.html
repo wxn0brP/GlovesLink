@@ -1,0 +1,168 @@
+<h1>Room API</h1>
+<p>Rooms in GlovesLink provide a way to organize clients into groups for more targeted messaging. Rooms can be used for features like chat rooms, game lobbies, or any scenario where you need to send messages to a subset of connected clients.</p>
+<h2>Class: Room</h2>
+<h3>Properties</h3>
+<ul>
+<li><code>clients</code>: Set<GLSocket> - Set of sockets in the room</li>
+<li><code>eventEmitter</code>: EventEmitter - Internal event emitter for room events</li>
+</ul>
+<h3>Methods</h3>
+<h4><code>join(socket)</code></h4>
+<p>Add a socket to the room.</p>
+<pre><code class="language-typescript">room.join(socket: GLSocket)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>socket</code> (GLSocket): The socket to add to the room</li>
+</ul>
+<h4><code>leave(socket)</code></h4>
+<p>Remove a socket from the room.</p>
+<pre><code class="language-typescript">room.leave(socket: GLSocket)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>socket</code> (GLSocket): The socket to remove from the room</li>
+</ul>
+<h4><code>leaveAll()</code></h4>
+<p>Remove all sockets from the room.</p>
+<pre><code class="language-typescript">room.leaveAll()
+</code></pre>
+<h4><code>onJoin(handler)</code></h4>
+<p>Register a handler for when a socket joins the room.</p>
+<pre><code class="language-typescript">room.onJoin(handler: (socket: GLSocket, room: Room) =&gt; void)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>handler</code> (Function): The function to call when a socket joins</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">room.onJoin((socket, room) =&gt; {
+    console.log(`Socket ${socket.id} joined the room`);
+    // Notify other clients in the room
+    room.emitWithoutSelf(socket, &#39;userJoined&#39;, { userId: socket.id });
+});
+</code></pre>
+<h4><code>onLeave(handler)</code></h4>
+<p>Register a handler for when a socket leaves the room.</p>
+<pre><code class="language-typescript">room.onLeave(handler: (socket: GLSocket, room: Room) =&gt; void)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>handler</code> (Function): The function to call when a socket leaves</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">room.onLeave((socket, room) =&gt; {
+    console.log(`Socket ${socket.id} left the room`);
+    // Notify other clients in the room
+    room.emit(&#39;userLeft&#39;, { userId: socket.id });
+});
+</code></pre>
+<h4><code>size</code></h4>
+<p>Get the number of sockets in the room.</p>
+<pre><code class="language-typescript">room.size
+</code></pre>
+<p><strong>Returns:</strong></p>
+<ul>
+<li><code>number</code>: The number of sockets in the room</li>
+</ul>
+<h4><code>sockets</code></h4>
+<p>Get an array of all sockets in the room.</p>
+<pre><code class="language-typescript">room.sockets
+</code></pre>
+<p><strong>Returns:</strong></p>
+<ul>
+<li><code>GLSocket[]</code>: Array of sockets in the room</li>
+</ul>
+<h4><code>emit(event, ...args)</code></h4>
+<p>Send an event to all sockets in the room.</p>
+<pre><code class="language-typescript">room.emit(event: string, ...args: any[])
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>event</code> (string): The event name to emit</li>
+<li><code>...args</code> (any[]): Optional data to send with the event</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">room.emit(&#39;message&#39;, { 
+    user: &#39;John&#39;, 
+    text: &#39;Hello everyone in this room!&#39; 
+});
+</code></pre>
+<h4><code>emitWithoutSelf(socket, event, ...args)</code></h4>
+<p>Send an event to all sockets in the room except the specified socket.</p>
+<pre><code class="language-typescript">room.emitWithoutSelf(socket: GLSocket, event: string, ...args: any[])
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>socket</code> (GLSocket): The socket to exclude from the broadcast</li>
+<li><code>event</code> (string): The event name to emit</li>
+<li><code>...args</code> (any[]): Optional data to send with the event</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">// When a user sends a message, broadcast it to others but not themselves
+room.onJoin((socket) =&gt; {
+    socket.on(&#39;sendMessage&#39;, (data) =&gt; {
+        room.emitWithoutSelf(socket, &#39;message&#39;, {
+            user: socket.id,
+            text: data.text
+        });
+    });
+});
+</code></pre>
+<h4><code>has(socket)</code></h4>
+<p>Check if a socket is in the room.</p>
+<pre><code class="language-typescript">room.has(socket: GLSocket)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>socket</code> (GLSocket): The socket to check</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<ul>
+<li><code>boolean</code>: True if the socket is in the room, false otherwise</li>
+</ul>
+<h2>Working with Rooms</h2>
+<h3>Creating and Accessing Rooms</h3>
+<p>Rooms are created automatically when first accessed:</p>
+<pre><code class="language-typescript">// Get or create a room
+const chatRoom = server.room(&#39;chat-room&#39;);
+
+// Or access the global room
+const globalRoom = server.globalRoom;
+</code></pre>
+<h3>Joining and Leaving Rooms</h3>
+<p>Sockets can join and leave rooms:</p>
+<pre><code class="language-typescript">// From the server side
+server.onConnect((socket) =&gt; {
+    // Join a room
+    const chatRoom = server.room(&#39;chat-room&#39;);
+    chatRoom.join(socket);
+    
+    // Or use the socket method
+    socket.joinRoom(&#39;chat-room&#39;);
+});
+
+// From the socket side
+socket.on(&#39;joinRoom&#39;, (roomName) =&gt; {
+    socket.joinRoom(roomName);
+});
+
+socket.on(&#39;leaveRoom&#39;, (roomName) =&gt; {
+    socket.leaveRoom(roomName);
+});
+</code></pre>
+<h3>Broadcasting to Rooms</h3>
+<p>You can broadcast messages to all members of a room:</p>
+<pre><code class="language-typescript">// From the server
+server.broadcastRoom(&#39;chat-room&#39;, &#39;announcement&#39;, {
+    message: &#39;Server maintenance in 10 minutes&#39;
+});
+
+// From a room instance
+const chatRoom = server.room(&#39;chat-room&#39;);
+chatRoom.emit(&#39;message&#39;, {
+    user: &#39;System&#39;,
+    text: &#39;Welcome to the chat room!&#39;
+});
+</code></pre>
+

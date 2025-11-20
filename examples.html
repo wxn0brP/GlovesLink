@@ -1,0 +1,569 @@
+<h1>Examples</h1>
+<p>This document provides several practical examples of how to use GlovesLink in various scenarios.</p>
+<h2>Basic Chat Application</h2>
+<h3>Server</h3>
+<pre><code class="language-typescript">import { GlovesLinkServer } from &#39;@wxn0brp/gloves-link/server&#39;;
+import { FalconFrame } from &#39;@wxn0brp/falcon-frame&#39;;
+
+// Create HTTP server with FalconFrame
+const app = new FalconFrame();
+const server = = app.listen(3000, true);
+
+// Initialize GlovesLink
+const glovesLink = new GlovesLinkServer({
+    server,
+    logs: true
+});
+glovesLink.falconFrame(app); // Add FalconFrame routes to client and error info
+
+glovesLink.onConnect((socket) =&gt; {
+    console.log(&#39;User connected:&#39;, socket.id);
+    
+    // Handle user joining a chat room
+    socket.on(&#39;joinRoom&#39;, (roomName) =&gt; {
+        socket.joinRoom(roomName);
+        // Notify others in the room
+        glovesLink.broadcastRoom(roomName, &#39;userJoined&#39;, {
+            userId: socket.id,
+            message: `${socket.id} joined the room`
+        });
+    });
+    
+    // Handle sending messages
+    socket.on(&#39;sendMessage&#39;, (data) =&gt; {
+        const { roomName, message } = data;
+        // Broadcast to all in room except sender
+        glovesLink.broadcastRoom(roomName, &#39;message&#39;, {
+            userId: socket.id,
+            message: message
+        });
+    });
+    
+    // Handle disconnection
+    socket.on(&#39;disconnect&#39;, () =&gt; {
+        console.log(&#39;User disconnected:&#39;, socket.id);
+    });
+});
+</code></pre>
+<h3>Client</h3>
+<pre><code class="language-typescript">import GlovesLinkClient from &#39;@wxn0brp/gloves-link/client&#39;;
+
+// Connect to server
+const client = new GlovesLinkClient(&#39;ws://localhost:3000&#39;, {
+    reConnect: true,
+    logs: true
+});
+
+// Join a room after connecting
+client.on(&#39;connect&#39;, () =&gt; {
+    client.emit(&#39;joinRoom&#39;, &#39;general&#39;);
+});
+
+// Handle incoming messages
+client.on(&#39;message&#39;, (data) =&gt; {
+    const messageElement = document.createElement(&#39;div&#39;);
+    messageElement.textContent = `${data.userId}: ${data.message}`;
+    document.getElementById(&#39;messages&#39;).appendChild(messageElement);
+});
+
+// Handle user join notifications
+client.on(&#39;userJoined&#39;, (data) =&gt; {
+    const notificationElement = document.createElement(&#39;div&#39;);
+    notificationElement.textContent = data.message;
+    notificationElement.className = &#39;notification&#39;;
+    document.getElementById(&#39;messages&#39;).appendChild(notificationElement);
+});
+
+// Send a message
+function sendMessage() {
+    const messageInput = document.getElementById(&#39;messageInput&#39;);
+    client.emit(&#39;sendMessage&#39;, {
+        roomName: &#39;general&#39;,
+        message: messageInput.value
+    });
+    messageInput.value = &#39;&#39;;
+}
+</code></pre>
+<h2>Real-time Game Lobby</h2>
+<h3>Server</h3>
+<pre><code class="language-typescript">import { GlovesLinkServer } from &#39;@wxn0brp/gloves-link/server&#39;;
+import http from &#39;http&#39;;
+
+const server = http.createServer();
+server.listen(3000);
+
+const glovesLink = new GlovesLinkServer({
+    server,
+    logs: true
+});
+
+// Store game lobbies
+const lobbies = new Map();
+
+glovesLink.onConnect((socket) =&gt; {
+    console.log(&#39;Player connected:&#39;, socket.id);
+    
+    // Create a new game lobby
+    socket.on(&#39;createLobby&#39;, (data) =&gt; {
+        const { lobbyName, maxPlayers } = data;
+        const lobbyId = `${lobbyName}-${Date.now()}`;
+        
+        // Create lobby data
+        const lobby = {
+            id: lobbyId,
+            name: lobbyName,
+            maxPlayers: maxPlayers,
+            players: [socket.id],
+            host: socket.id,
+            status: &#39;waiting&#39; // waiting, playing, finished
+        };
+        
+        lobbies.set(lobbyId, lobby);
+        socket.joinRoom(lobbyId);
+        
+        // Send lobby info back to creator
+        socket.emit(&#39;lobbyCreated&#39;, lobby);
+        
+        // Broadcast to lobby browser
+        glovesLink.broadcast(&#39;lobbyListUpdated&#39;, {
+            action: &#39;created&#39;,
+            lobby: lobby
+        });
+    });
+    
+    // Join an existing lobby
+    socket.on(&#39;joinLobby&#39;, (lobbyId) =&gt; {
+        const lobby = lobbies.get(lobbyId);
+        if (!lobby) {
+            socket.emit(&#39;error&#39;, { message: &#39;Lobby not found&#39; });
+            return;
+        }
+        
+        if (lobby.players.length &gt;= lobby.maxPlayers) {
+            socket.emit(&#39;error&#39;, { message: &#39;Lobby is full&#39; });
+            return;
+        }
+        
+        lobby.players.push(socket.id);
+        socket.joinRoom(lobbyId);
+        
+        // Notify lobby members
+        glovesLink.broadcastRoom(lobbyId, &#39;playerJoined&#39;, {
+            playerId: socket.id,
+            playerName: `Player-${socket.id.substring(0, 6)}`
+        });
+        
+        // Send lobby info to joiner
+        socket.emit(&#39;lobbyJoined&#39;, lobby);
+        
+        // Update lobby browser
+        glovesLink.broadcast(&#39;lobbyListUpdated&#39;, {
+            action: &#39;updated&#39;,
+            lobby: lobby
+        });
+    });
+    
+    // Start the game
+    socket.on(&#39;startGame&#39;, (lobbyId) =&gt; {
+        const lobby = lobbies.get(lobbyId);
+        if (!lobby) return;
+        
+        if (lobby.host !== socket.id) {
+            socket.emit(&#39;error&#39;, { message: &#39;Only host can start the game&#39; });
+            return;
+        }
+        
+        lobby.status = &#39;playing&#39;;
+        
+        // Notify all players
+        glovesLink.broadcastRoom(lobbyId, &#39;gameStarted&#39;, {
+            // Game initialization data
+        });
+    });
+    
+    // Handle game actions
+    socket.on(&#39;gameAction&#39;, (data) =&gt; {
+        const { lobbyId, action, payload } = data;
+        // Process game action and broadcast to others
+        glovesLink.broadcastRoom(lobbyId, &#39;gameUpdate&#39;, {
+            playerId: socket.id,
+            action: action,
+            payload: payload
+        });
+    });
+    
+    // Handle disconnection
+    socket.on(&#39;disconnect&#39;, () =&gt; {
+        // Remove player from any lobbies they&#39;re in
+        for (const [lobbyId, lobby] of lobbies.entries()) {
+            const playerIndex = lobby.players.indexOf(socket.id);
+            if (playerIndex &gt; -1) {
+                lobby.players.splice(playerIndex, 1);
+                
+                // If lobby is now empty, remove it
+                if (lobby.players.length === 0) {
+                    lobbies.delete(lobbyId);
+                    glovesLink.broadcast(&#39;lobbyListUpdated&#39;, {
+                        action: &#39;deleted&#39;,
+                        lobbyId: lobbyId
+                    });
+                } else {
+                    // Notify remaining players
+                    glovesLink.broadcastRoom(lobbyId, &#39;playerLeft&#39;, {
+                        playerId: socket.id
+                    });
+                    
+                    // If host left, assign new host
+                    if (lobby.host === socket.id &amp;&amp; lobby.players.length &gt; 0) {
+                        lobby.host = lobby.players[0];
+                        glovesLink.broadcastRoom(lobbyId, &#39;newHost&#39;, {
+                            playerId: lobby.host
+                        });
+                    }
+                    
+                    // Update lobby browser
+                    glovesLink.broadcast(&#39;lobbyListUpdated&#39;, {
+                        action: &#39;updated&#39;,
+                        lobby: lobby
+                    });
+                }
+                break;
+            }
+        }
+    });
+});
+</code></pre>
+<h3>Client</h3>
+<pre><code class="language-typescript">import GlovesLinkClient from &#39;@wxn0brp/gloves-link/client&#39;;
+
+class GameLobbyClient {
+    constructor() {
+        this.client = new GlovesLinkClient(&#39;ws://localhost:3000&#39;, {
+            reConnect: true,
+            logs: true
+        });
+        this.currentLobby = null;
+        this.setupEventHandlers();
+    }
+    
+    setupEventHandlers() {
+        this.client.on(&#39;connect&#39;, () =&gt; {
+            console.log(&#39;Connected to game server&#39;);
+            this.refreshLobbyList();
+        });
+        
+        this.client.on(&#39;lobbyListUpdated&#39;, (data) =&gt; {
+            this.updateLobbyListUI(data);
+        });
+        
+        this.client.on(&#39;lobbyCreated&#39;, (lobby) =&gt; {
+            this.currentLobby = lobby;
+            this.showLobbyScreen(lobby);
+        });
+        
+        this.client.on(&#39;lobbyJoined&#39;, (lobby) =&gt; {
+            this.currentLobby = lobby;
+            this.showLobbyScreen(lobby);
+        });
+        
+        this.client.on(&#39;playerJoined&#39;, (data) =&gt; {
+            this.addPlayerToLobby(data.playerId);
+        });
+        
+        this.client.on(&#39;playerLeft&#39;, (data) =&gt; {
+            this.removePlayerFromLobby(data.playerId);
+        });
+        
+        this.client.on(&#39;gameStarted&#39;, (data) =&gt; {
+            this.startGame(data);
+        });
+        
+        this.client.on(&#39;gameUpdate&#39;, (data) =&gt; {
+            this.handleGameUpdate(data);
+        });
+    }
+    
+    createLobby(name, maxPlayers) {
+        this.client.emit(&#39;createLobby&#39;, {
+            lobbyName: name,
+            maxPlayers: maxPlayers
+        });
+    }
+    
+    joinLobby(lobbyId) {
+        this.client.emit(&#39;joinLobby&#39;, lobbyId);
+    }
+    
+    startGame() {
+        if (this.currentLobby &amp;&amp; this.currentLobby.host === this.client.id) {
+            this.client.emit(&#39;startGame&#39;, this.currentLobby.id);
+        }
+    }
+    
+    sendGameAction(action, payload) {
+        this.client.emit(&#39;gameAction&#39;, {
+            lobbyId: this.currentLobby.id,
+            action: action,
+            payload: payload
+        });
+    }
+    
+    refreshLobbyList() {
+        // In a real implementation, you might have a separate API call
+        // or the server could broadcast lobby lists periodically
+    }
+}
+
+// Initialize the client
+const gameClient = new GameLobbyClient();
+</code></pre>
+<h2>Authentication Example</h2>
+<h3>Server</h3>
+<pre><code class="language-typescript">import { GlovesLinkServer } from &#39;@wxn0brp/gloves-link/server&#39;;
+import http from &#39;http&#39;;
+
+// Simple user database (in practice, use a real database)
+const users = new Map([
+    [&#39;user1&#39;, { id: &#39;user1&#39;, token: &#39;token1&#39;, name: &#39;Alice&#39; }],
+    [&#39;user2&#39;, { id: &#39;user2&#39;, token: &#39;token2&#39;, name: &#39;Bob&#39; }]
+]);
+
+const server = http.createServer();
+server.listen(3000);
+
+const glovesLink = new GlovesLinkServer({
+    server,
+    logs: true,
+    authFn: async ({ headers, url, token }) =&gt; {
+        // Check if token is valid
+        for (const [userId, user] of users.entries()) {
+            if (user.token === token) {
+                // Attach user info to the socket for later use
+                // This would require modifying the GLSocket class or using a session store
+                return true;
+            }
+        }
+        return false;
+    }
+});
+
+// Store user info by socket ID
+const socketUsers = new Map();
+
+glovesLink.onConnect((socket) =&gt; {
+    // In a real implementation, you&#39;d retrieve user info from the auth process
+    // For this example, we&#39;ll simulate it
+    const token = new URL(socket.request.url, &#39;http://localhost&#39;).searchParams.get(&#39;token&#39;);
+    let user = null;
+    for (const [userId, userData] of users.entries()) {
+        if (userData.token === token) {
+            user = userData;
+            break;
+        }
+    }
+    
+    if (user) {
+        socketUsers.set(socket.id, user);
+        console.log(`Authenticated user ${user.name} connected with socket ${socket.id}`);
+    }
+    
+    // Handle events with user context
+    socket.on(&#39;sendMessage&#39;, (data) =&gt; {
+        const user = socketUsers.get(socket.id);
+        if (!user) {
+            socket.emit(&#39;error&#39;, { message: &#39;User not authenticated&#39; });
+            return;
+        }
+        
+        // Broadcast with user info
+        glovesLink.broadcast(&#39;message&#39;, {
+            userId: user.id,
+            userName: user.name,
+            message: data.message,
+            timestamp: Date.now()
+        });
+    });
+    
+    socket.on(&#39;disconnect&#39;, () =&gt; {
+        socketUsers.delete(socket.id);
+        console.log(`Socket ${socket.id} disconnected`);
+    });
+});
+</code></pre>
+<h3>Client</h3>
+<pre><code class="language-javascript">import GlovesLinkClient from &#39;@wxn0brp/gloves-link/client&#39;;
+
+// In a real app, you&#39;d get this token from a login process
+const USER_TOKEN = &#39;token1&#39;; // Alice&#39;s token
+
+const client = new GlovesLinkClient(`ws://localhost:3000?token=${USER_TOKEN}`, {
+    reConnect: true,
+    logs: true
+});
+
+client.on(&#39;connect&#39;, () =&gt; {
+    console.log(&#39;Connected with authentication&#39;);
+});
+
+client.on(&#39;unauthorized&#39;, () =&gt; {
+    console.log(&#39;Authentication failed&#39;);
+    // Redirect to login page or show error
+});
+
+client.on(&#39;message&#39;, (data) =&gt; {
+    const messageElement = document.createElement(&#39;div&#39;);
+    messageElement.innerHTML = `&lt;strong&gt;${data.userName}:&lt;/strong&gt; ${data.message}`;
+    document.getElementById(&#39;chat&#39;).appendChild(messageElement);
+});
+
+function sendMessage() {
+    const input = document.getElementById(&#39;messageInput&#39;);
+    client.emit(&#39;sendMessage&#39;, {
+        message: input.value
+    });
+    input.value = &#39;&#39;;
+}
+</code></pre>
+<h2>Real-time Dashboard</h2>
+<h3>Server</h3>
+<pre><code class="language-typescript">import { GlovesLinkServer } from &#39;@wxn0brp/gloves-link/server&#39;;
+import http from &#39;http&#39;;
+
+const server = http.createServer();
+server.listen(3000);
+
+const glovesLink = new GlovesLinkServer({
+    server,
+    logs: true
+});
+
+// Simulate real-time data
+let metrics = {
+    usersOnline: 0,
+    cpuUsage: 0,
+    memoryUsage: 0,
+    requestsPerSecond: 0
+};
+
+// Update metrics periodically
+setInterval(() =&gt; {
+    metrics.usersOnline = Math.floor(Math.random() * 1000) + 500;
+    metrics.cpuUsage = Math.random() * 100;
+    metrics.memoryUsage = Math.random() * 100;
+    metrics.requestsPerSecond = Math.floor(Math.random() * 1000);
+    
+    // Broadcast updated metrics to dashboard room
+    glovesLink.broadcastRoom(&#39;dashboard&#39;, &#39;metricsUpdate&#39;, metrics);
+}, 5000);
+
+glovesLink.onConnect((socket) =&gt; {
+    console.log(&#39;Dashboard client connected:&#39;, socket.id);
+    
+    // Add client to dashboard room
+    socket.joinRoom(&#39;dashboard&#39;);
+    
+    // Send initial metrics
+    socket.emit(&#39;metricsUpdate&#39;, metrics);
+    
+    // Handle specific metric requests
+    socket.on(&#39;requestMetricsHistory&#39;, (data) =&gt; {
+        // In a real app, you&#39;d retrieve historical data from a database
+        const history = generateMetricsHistory(data.hours);
+        socket.emit(&#39;metricsHistory&#39;, history);
+    });
+});
+
+function generateMetricsHistory(hours) {
+    const history = [];
+    const now = Date.now();
+    for (let i = hours - 1; i &gt;= 0; i--) {
+        const timestamp = now - (i * 3600000); // 1 hour intervals
+        history.push({
+            timestamp: timestamp,
+            usersOnline: Math.floor(Math.random() * 1000) + 500,
+            cpuUsage: Math.random() * 100,
+            memoryUsage: Math.random() * 100,
+            requestsPerSecond: Math.floor(Math.random() * 1000)
+        });
+    }
+    return history;
+}
+</code></pre>
+<h3>Client</h3>
+<pre><code class="language-javascript">import GlovesLinkClient from &#39;@wxn0brp/gloves-link/client&#39;;
+
+class DashboardClient {
+    constructor() {
+        this.client = new GlovesLinkClient(&#39;ws://localhost:3000&#39;, {
+            reConnect: true,
+            logs: true
+        });
+        this.metricsHistory = [];
+        this.setupEventHandlers();
+    }
+    
+    setupEventHandlers() {
+        this.client.on(&#39;connect&#39;, () =&gt; {
+            console.log(&#39;Connected to dashboard server&#39;);
+            this.requestMetricsHistory(24); // Get 24 hours of history
+        });
+        
+        this.client.on(&#39;metricsUpdate&#39;, (metrics) =&gt; {
+            this.updateMetricsDisplay(metrics);
+            this.addToMetricsHistory(metrics);
+        });
+        
+        this.client.on(&#39;metricsHistory&#39;, (history) =&gt; {
+            this.metricsHistory = history;
+            this.renderCharts();
+        });
+    }
+    
+    updateMetricsDisplay(metrics) {
+        document.getElementById(&#39;usersOnline&#39;).textContent = metrics.usersOnline;
+        document.getElementById(&#39;cpuUsage&#39;).textContent = metrics.cpuUsage.toFixed(2) + &#39;%&#39;;
+        document.getElementById(&#39;memoryUsage&#39;).textContent = metrics.memoryUsage.toFixed(2) + &#39;%&#39;;
+        document.getElementById(&#39;requestsPerSecond&#39;).textContent = metrics.requestsPerSecond;
+        
+        // Update progress bars or charts
+        this.updateProgressBar(&#39;cpuUsageBar&#39;, metrics.cpuUsage);
+        this.updateProgressBar(&#39;memoryUsageBar&#39;, metrics.memoryUsage);
+    }
+    
+    updateProgressBar(elementId, value) {
+        const bar = document.getElementById(elementId);
+        bar.style.width = value + &#39;%&#39;;
+        bar.className = value &gt; 80 ? &#39;progress-bar bg-danger&#39; : 
+                        value &gt; 60 ? &#39;progress-bar bg-warning&#39; : 
+                        &#39;progress-bar bg-success&#39;;
+    }
+    
+    addToMetricsHistory(metrics) {
+        this.metricsHistory.push({
+            timestamp: Date.now(),
+            ...metrics
+        });
+        
+        // Keep only last 100 entries
+        if (this.metricsHistory.length &gt; 100) {
+            this.metricsHistory.shift();
+        }
+        
+        this.renderCharts();
+    }
+    
+    requestMetricsHistory(hours) {
+        this.client.emit(&#39;requestMetricsHistory&#39;, { hours: hours });
+    }
+    
+    renderCharts() {
+        // In a real implementation, you&#39;d use a charting library like Chart.js
+        // This is just a placeholder for the concept
+        console.log(&#39;Rendering charts with&#39;, this.metricsHistory.length, &#39;data points&#39;);
+    }
+}
+
+// Initialize dashboard
+const dashboard = new DashboardClient();
+</code></pre>
+

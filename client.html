@@ -1,0 +1,95 @@
+<h1>Client API</h1>
+<p>The client-side API for GlovesLink provides a simple interface for connecting to a WebSocket server and exchanging messages.</p>
+<h2>Class: GlovesLinkClient</h2>
+<h3>Constructor</h3>
+<pre><code class="language-typescript">new GlovesLinkClient(url: string, opts?: Partial&lt;GLC_Opts&gt;)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>url</code> (string): The WebSocket server URL to connect to</li>
+<li><code>opts</code> (Partial<GLC_Opts>, optional): Configuration options</li>
+</ul>
+<p><strong>Options:</strong></p>
+<pre><code class="language-typescript">{
+    reConnect?: boolean;        // Whether to automatically reconnect after disconnection (default: true)
+    reConnectInterval?: number; // Reconnection interval in milliseconds (default: 1000)
+    logs?: boolean;             // Enable or disable logging (default: false)
+    token?: string;             // Authentication token (default: null)
+}
+</code></pre>
+<h3>Properties</h3>
+<ul>
+<li><code>ws</code>: WebSocket - The underlying WebSocket connection</li>
+<li><code>ackIdCounter</code>: number - Counter for tracking acknowledgment IDs</li>
+<li><code>ackCallbacks</code>: Map&lt;number, Function&gt; - Map of acknowledgment callbacks</li>
+<li><code>handlers</code>: { [key: string]: Function } - Event handlers</li>
+<li><code>opts</code>: GLC_Opts - Configuration options</li>
+<li><code>url</code>: URL - The parsed WebSocket URL</li>
+</ul>
+<h3>Methods</h3>
+<h4><code>on(event, handler)</code></h4>
+<p>Listen for events from the server.</p>
+<pre><code class="language-typescript">client.on(event: string, handler: (...args: any[]) =&gt; void | any)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>event</code> (string): The event name to listen for</li>
+<li><code>handler</code> (Function): The function to call when the event is received</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">client.on(&#39;message&#39;, (data) =&gt; {
+    console.log(&#39;Received message:&#39;, data);
+});
+</code></pre>
+<h4><code>emit(event, ...args)</code></h4>
+<p>Emit an event to the server with optional data.</p>
+<pre><code class="language-typescript">client.emit(event: string, ...args: any[])
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>event</code> (string): The event name to emit</li>
+<li><code>...args</code> (any[]): Optional data to send with the event</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">client.emit(&#39;sendMessage&#39;, { text: &#39;Hello server!&#39; });
+</code></pre>
+<h4><code>send(event, ...args)</code></h4>
+<p>Alias for <code>emit</code>. Send an event to the server with optional data.</p>
+<pre><code class="language-typescript">client.send(event: string, ...args: any[])
+</code></pre>
+<h4><code>close()</code></h4>
+<p>Close the WebSocket connection.</p>
+<pre><code class="language-typescript">client.close()
+</code></pre>
+<h3>Events</h3>
+<p>The client can listen for the following built-in events:</p>
+<ul>
+<li><code>connect</code>: Emitted when the connection is established</li>
+<li><code>disconnect</code>: Emitted when the connection is closed</li>
+<li><code>error</code>: Emitted when an error occurs</li>
+<li><code>unauthorized</code>: Emitted when authentication fails with a 401 status</li>
+<li><code>forbidden</code>: Emitted when access is denied with a 403 status</li>
+<li><code>serverError</code>: Emitted when the server encounters an error with a 500 status</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">client.on(&#39;connect&#39;, () =&gt; {
+    console.log(&#39;Connected to server&#39;);
+});
+
+client.on(&#39;disconnect&#39;, () =&gt; {
+    console.log(&#39;Disconnected from server&#39;);
+});
+</code></pre>
+<h3>Acknowledgments</h3>
+<p>GlovesLink supports acknowledgments for events. You can send a function as part of the data, and it will be called when the server responds.</p>
+<p><strong>Client-side:</strong></p>
+<pre><code class="language-typescript">client.emit(&#39;getData&#39;, (response) =&gt; {
+    console.log(&#39;Server response:&#39;, response);
+});
+</code></pre>
+<p><strong>Server-side:</strong></p>
+<pre><code class="language-typescript">socket.on(&#39;getData&#39;, (cb) =&gt; {
+    cb({ message: &#39;Hello from server!&#39; });
+});
+</code></pre>
+

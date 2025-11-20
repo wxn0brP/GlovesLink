@@ -1,0 +1,99 @@
+<h1>Socket API</h1>
+<p>The GLSocket class represents an individual WebSocket connection on the server side. It provides methods for sending and receiving events, as well as managing room memberships.</p>
+<h2>Class: GLSocket</h2>
+<h3>Properties</h3>
+<ul>
+<li><code>id</code>: string - Unique identifier for the socket</li>
+<li><code>ws</code>: WebSocket - The underlying WebSocket connection</li>
+<li><code>server</code>: GlovesLinkServer - Reference to the parent server instance</li>
+<li><code>rooms</code>: Set<string> - Set of room names the socket has joined</li>
+<li><code>ackIdCounter</code>: number - Counter for tracking acknowledgment IDs</li>
+<li><code>ackCallbacks</code>: Map&lt;number, Function&gt; - Map of acknowledgment callbacks</li>
+<li><code>logs</code>: boolean - Whether logging is enabled</li>
+<li><code>handlers</code>: { [key: string]: Function } - Event handlers</li>
+</ul>
+<h3>Methods</h3>
+<h4><code>on(event, handler)</code></h4>
+<p>Listen for events from the client.</p>
+<pre><code class="language-typescript">socket.on(event: string, handler: (...args: any[]) =&gt; void | any)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>event</code> (string): The event name to listen for</li>
+<li><code>handler</code> (Function): The function to call when the event is received</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">socket.on(&#39;message&#39;, (data) =&gt; {
+    console.log(&#39;Received message:&#39;, data);
+});
+</code></pre>
+<h4><code>emit(event, ...args)</code></h4>
+<p>Emit an event to the client with optional data.</p>
+<pre><code class="language-typescript">socket.emit(event: string, ...args: any[])
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>event</code> (string): The event name to emit</li>
+<li><code>...args</code> (any[]): Optional data to send with the event</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">socket.emit(&#39;response&#39;, { status: &#39;success&#39;, data: &#39;Hello client!&#39; });
+</code></pre>
+<h4><code>send(event, ...args)</code></h4>
+<p>Alias for <code>emit</code>. Send an event to the client with optional data.</p>
+<pre><code class="language-typescript">socket.send(event: string, ...args: any[])
+</code></pre>
+<h4><code>close()</code></h4>
+<p>Close the WebSocket connection.</p>
+<pre><code class="language-typescript">socket.close()
+</code></pre>
+<h4><code>joinRoom(roomName)</code></h4>
+<p>Join a specific room.</p>
+<pre><code class="language-typescript">socket.joinRoom(roomName: string)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>roomName</code> (string): The name of the room to join</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">socket.on(&#39;joinChat&#39;, (roomName) =&gt; {
+    socket.joinRoom(roomName);
+    socket.emit(&#39;joined&#39;, { room: roomName });
+});
+</code></pre>
+<h4><code>leaveRoom(roomName)</code></h4>
+<p>Leave a specific room.</p>
+<pre><code class="language-typescript">socket.leaveRoom(roomName: string)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>roomName</code> (string): The name of the room to leave</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">socket.on(&#39;leaveChat&#39;, (roomName) =&gt; {
+    socket.leaveRoom(roomName);
+    socket.emit(&#39;left&#39;, { room: roomName });
+});
+</code></pre>
+<h4><code>leaveAllRooms()</code></h4>
+<p>Leave all joined rooms.</p>
+<pre><code class="language-typescript">socket.leaveAllRooms()
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-typescript">socket.on(&#39;disconnect&#39;, () =&gt; {
+    socket.leaveAllRooms();
+});
+</code></pre>
+<h3>Acknowledgments</h3>
+<p>Like the client, sockets support acknowledgments for events. You can send a function as part of the data, and it will be called when the client responds.</p>
+<p><strong>Server-side:</strong></p>
+<pre><code class="language-typescript">socket.emit(&#39;getData&#39;, (response) =&gt; {
+    console.log(&#39;Client response:&#39;, response);
+});
+</code></pre>
+<p><strong>Client-side:</strong></p>
+<pre><code class="language-javascript">client.on(&#39;getData&#39;, (ack) =&gt; {
+    ack({ message: &#39;Hello from client!&#39; });
+});
+</code></pre>
+
