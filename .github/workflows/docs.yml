@@ -1,0 +1,39 @@
+name: Build and Deploy Docs
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "docs/**"
+
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Convert Markdown to HTML
+        run: |
+          mkdir -p public
+          for md_file in docs/*.md; do
+            if [ -f "$md_file" ]; then
+              filename=$(basename "$md_file" .md)
+              bunx marked < "$md_file" > "public/$filename.html"
+            fi
+          done
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
