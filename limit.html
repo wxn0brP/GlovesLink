@@ -1,0 +1,109 @@
+<h1>Limit API</h1>
+<p><code>@wxn0brp/gls-limit</code> is a rate limiting and event management library for GlovesLink server sockets. It provides spam protection, event validation, and standardized error responses.</p>
+<h2>Installation</h2>
+<pre><code class="language-bash">bun add @wxn0brp/gls-limit @wxn0brp/gloves-link-server @wxn0brp/ac @wxn0brp/falcon-frame
+</code></pre>
+<h2>Quick Start</h2>
+<pre><code class="language-typescript">import { setupSocket } from &quot;@wxn0brp/gls-limit&quot;;
+import { Events, Socket_StandardRes } from &quot;@wxn0brp/gls-limit/types&quot;;
+import { SocketRes } from &quot;@wxn0brp/gls-limit/validError&quot;;
+import { GLSocket } from &quot;@wxn0brp/gloves-link-server&quot;;
+
+const events: Events[][] = [
+    [
+        [&quot;handle.message&quot;, 100, true, handle_message],
+    ]
+];
+
+async function handle_message(socket: GLSocket, message: string): Promise&lt;Socket_StandardRes&gt; {
+    const res = new SocketRes(&quot;handle.message&quot;);
+
+    if (!socket.user) return res.valid(&quot;not logged in&quot;);
+
+    const invalid = res.check(
+        { message: &quot;required|string|max:100&quot; },
+        { message }
+    );
+    if (invalid) return invalid;
+
+    return res.data(&quot;message sent&quot;);
+}
+
+function onConnection(socket: GLSocket) {
+    const { engine, limiter } = setupSocket(socket, events);
+}
+</code></pre>
+<h2>API</h2>
+<h3><code>setupSocket(socket, events, logError?)</code></h3>
+<pre><code class="language-typescript">import { setupSocket } from &quot;@wxn0brp/gls-limit&quot;;
+
+const { engine, limiter } = setupSocket(socket, events);
+</code></pre>
+<p><strong>Returns:</strong></p>
+<ul>
+<li><code>engine: SocketEventEngine</code> - Event handler with rate limiting</li>
+<li><code>limiter: SocketEventLimiter</code> - Rate limiter instance</li>
+</ul>
+<h3>Rate Limiting</h3>
+<p>Default spam thresholds:</p>
+<pre><code class="language-typescript">{
+    warningDelay: 100,      // ms delay after warnLimit
+    warnLimit: 1,           // warnings before action
+    spamLimit: 5,           // max events before blocking
+    disconnectLimit: 15,    // events before disconnect + ban
+    resetInterval: 1000,    // ms before counter reset
+    banDuration: 600000     // 10 minutes
+}
+</code></pre>
+<h3>Banned Users</h3>
+<pre><code class="language-typescript">import { bannedUsers } from &quot;@wxn0brp/gls-limit/limiter&quot;;
+
+const banExpiry = bannedUsers.get(userId);
+</code></pre>
+<h3>Error Handling</h3>
+<pre><code class="language-typescript">import { SocketRes } from &quot;@wxn0brp/gls-limit/validError&quot;;
+
+const res = new SocketRes(&quot;event.name&quot;);
+
+res.data({ key: &quot;value&quot; });           // Success response
+res.valid(&quot;Field is required&quot;);       // Validation error
+res.err(&quot;Something went wrong&quot;);      // General error
+</code></pre>
+<h3>Validation with FalconFrame</h3>
+<p><code>SocketRes</code> integrates with FalconFrame&#39;s validation system:</p>
+<pre><code class="language-typescript">const res = new SocketRes(&quot;user.create&quot;);
+
+const invalid = res.check(
+    {
+        name: &quot;required|string|min:3|max:50&quot;,
+        email: &quot;required|email&quot;,
+        age: &quot;required|integer|between:18,120&quot;
+    },
+    { name, email, age }
+);
+
+if (invalid) return invalid;
+// Validation passed, continue...
+</code></pre>
+<p><strong>Returns:</strong> <code>null</code> if valid, or <code>Socket_StandardRes</code> with validation errors if invalid.</p>
+<h3>Events</h3>
+<ul>
+<li>Spam notifications via <code>error.spam</code>:</li>
+</ul>
+<pre><code class="language-typescript">socket.on(&quot;error.spam&quot;, (type, ...args) =&gt; {
+    // &quot;warn&quot;           - Warning issued
+    // &quot;last&quot;, time     - Final warning (time in seconds)
+    // &quot;ban&quot;, duration  - User banned (duration in ms)
+});
+</code></pre>
+<ul>
+<li>Validation errors via <code>error.valid</code>:</li>
+</ul>
+<pre><code class="language-typescript">socket.on(&quot;error.valid&quot;, (module, ...args) =&gt; {});
+</code></pre>
+<ul>
+<li>General errors via <code>error</code>:</li>
+</ul>
+<pre><code class="language-typescript">socket.on(&quot;error&quot;, (module, ...args) =&gt; {});
+</code></pre>
+

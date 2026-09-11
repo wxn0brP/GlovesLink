@@ -1,0 +1,53 @@
+<h1>Namespace API</h1>
+<p>Namespaces isolate sockets by URL path. Each has its own auth, connection handler, rooms, and user rooms.</p>
+<pre><code class="language-typescript">const ns = server.of(&quot;/chat&quot;);
+</code></pre>
+<h2>Connection Handler</h2>
+<pre><code class="language-typescript">ns.onConnect((socket, authData, authResult) =&gt; {
+    console.log(`${socket.user.name} connected`);
+
+    socket.on(&#39;message&#39;, (text) =&gt; {
+        ns.room(&#39;general&#39;).emit(&#39;message&#39;, { user: socket.user.name, text });
+    });
+});
+</code></pre>
+<h2>Authentication</h2>
+<p>See <a href="./server.md#authentication">Server API - Authentication</a> for the full auth flow. Auth is set per-namespace:</p>
+<pre><code class="language-typescript">ns.auth(async ({ token }) =&gt; {
+    const user = await validateToken(token);
+    if (!user) return { status: 401, msg: &quot;Invalid token&quot; };
+    return { status: 200, user: { _id: user.id, name: user.name } };
+});
+</code></pre>
+<h2>Emitting</h2>
+<pre><code class="language-typescript">ns.emit(&#39;announcement&#39;, { text: &#39;Server restarting&#39; });           // All sockets in namespace
+ns.emitWithoutSelf(socket, &#39;userJoined&#39;, { userId: socket.id });  // All except sender
+</code></pre>
+<h2>Rooms</h2>
+<pre><code class="language-typescript">ns.room(&#39;lobby&#39;);               // Get/create named room
+ns.userRoom(&#39;user-123&#39;);        // Get/create user-specific room
+ns.emitToUserId(&#39;user-123&#39;, &#39;notification&#39;, { type: &#39;achievement&#39; });
+</code></pre>
+<p>Each namespace has a default room containing all its sockets. <code>ns.emit()</code> sends to this room.</p>
+<p>See <a href="./room.md">Room API</a> for room details.</p>
+<h2>Full Example</h2>
+<pre><code class="language-typescript">const ns = server.of(&quot;/chat&quot;);
+
+ns.auth(async ({ token }) =&gt; {
+    const user = await db.users.findByToken(token);
+    if (!user) return { status: 401, msg: &quot;Invalid token&quot; };
+    return { status: 200, user: { _id: user.id, name: user.name } };
+});
+
+ns.onConnect((socket) =&gt; {
+    socket.on(&#39;sendMessage&#39;, (data) =&gt; {
+        ns.room(&#39;general&#39;).emit(&#39;message&#39;, { user: socket.user.name, text: data.text });
+    });
+
+    socket.on(&#39;joinRoom&#39;, (roomName) =&gt; {
+        socket.joinRoom(roomName);
+        ns.room(roomName).emitWithoutSelf(socket, &#39;userJoined&#39;, { userName: socket.user.name });
+    });
+});
+</code></pre>
+

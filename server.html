@@ -1,147 +1,94 @@
 <h1>Server API</h1>
-<p>The server-side API for GlovesLink provides functionality for managing WebSocket connections, handling events, and organizing clients into rooms.</p>
-<h2>Class: GlovesLinkServer</h2>
-<h3>Constructor</h3>
-<pre><code class="language-typescript">new GlovesLinkServer(opts: Partial&lt;Server_Opts&gt;)
+<p><code>GlovesLinkServer</code> manages WebSocket connections and namespaces.</p>
+<h2>Constructor</h2>
+<pre><code class="language-typescript">const server = new GlovesLinkServer(opts?: Partial&lt;Server_Opts&gt;)
 </code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>opts</code> (Partial<Server_Opts>): Configuration options</li>
-</ul>
-<p><strong>Options:</strong></p>
 <pre><code class="language-typescript">{
-    server: http.Server;                            // HTTP server instance (required)
-    logs?: boolean;                                 // Enable or disable logging (default: false)
-    authFn?: (data: Server_Auth_Opts) =&gt; boolean | Promise&lt;boolean&gt;; // Authentication function (default: () =&gt; true)
+    logs?: boolean;         // Enable logging (default: false)
+    statusTimeout?: number; // Socket status TTL in ms (default: 10000)
 }
 </code></pre>
-<p><strong>Server_Auth_Opts:</strong></p>
+<h2>Attaching to HTTP Server</h2>
+<pre><code class="language-typescript">const app = new FalconFrame();
+const httpServer = app.listen(3000);
+
+const gl = new GlovesLinkServer();
+gl.attachToHttpServer(httpServer);
+</code></pre>
+<h2>Namespaces</h2>
+<p>Namespaces isolate sockets by URL path. Each has its own auth, handlers, and rooms.</p>
+<pre><code class="language-typescript">const rootNs = gl.of(&quot;/&quot;);
+const chatNs = gl.of(&quot;/chat&quot;);
+</code></pre>
+<p>Sockets connecting to <code>ws://host/chat</code> are routed to the <code>/chat</code> namespace. A 404 is returned if no namespace exists for the path.</p>
+<p>See <a href="./namespace.md">Namespace API</a> for details.</p>
+<h2>Authentication</h2>
+<p>Auth is configured per-namespace via <code>namespace.auth(authFn)</code>. The function receives connection data and returns a result:</p>
+<pre><code class="language-typescript">gl.of(&quot;/&quot;).auth(async ({ token, url, headers, request, socket, head, data }) =&gt; {
+    const user = await validateToken(token);
+    if (user) return { status: 200, user };
+    return { status: 401, msg: &quot;Invalid token&quot; };
+});
+</code></pre>
+<p><strong>AuthFnResult:</strong></p>
 <pre><code class="language-typescript">{
-    headers: IncomingHttpHeaders;  // HTTP headers from the connection request
-    url: URL;                      // Parsed URL from the connection request
-    token?: string;                // Authentication token from URL parameters
+    status: number;             // 200 = success
+    user?: Record&lt;string, any&gt;; // Attached to socket.user
+    msg?: string;               // Error message for client
+    toSet?: Record&lt;string, any&gt; // Passed to connection handler
 }
 </code></pre>
-<h3>Properties</h3>
-<ul>
-<li><code>wss</code>: WebSocketServer - The underlying WebSocket server</li>
-<li><code>logs</code>: boolean - Whether logging is enabled</li>
-<li><code>opts</code>: Server_Opts - Configuration options</li>
-<li><code>rooms</code>: Rooms - Map of room instances</li>
-<li><code>globalRoom</code>: Room - The global room containing all connected sockets</li>
-</ul>
-<h3>Methods</h3>
-<h4><code>onConnect(handler)</code></h4>
-<p>Handle new client connections.</p>
-<pre><code class="language-typescript">server.onConnect(handler: (socket: GLSocket) =&gt; void)
+<p>When <code>user</code> has an <code>_id</code>, the socket is automatically added to a user-specific room accessible via <code>server.userRoom(userId)</code>.</p>
+<p><strong>Server_Auth_Opts</strong> (passed to authFn):</p>
+<pre><code class="language-typescript">{
+    headers: http.IncomingHttpHeaders;
+    url: URL;
+    token?: string;
+    request: http.IncomingMessage;
+    socket: Stream.Duplex;
+    head: Buffer;
+    data?: Record&lt;string, any&gt;;
+}
 </code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>handler</code> (Function): The function to call when a new client connects</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-typescript">server.onConnect((socket) =&gt; {
-    console.log(&#39;New connection:&#39;, socket.id);
-    
-    socket.on(&#39;message&#39;, (data) =&gt; {
-        console.log(&#39;Received message:&#39;, data);
-    });
-});
+<h2>Error Handling</h2>
+<p>GlovesLink handles errors automatically and communicates them to the client via the status endpoint:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>404</td>
+<td>Namespace not found</td>
+</tr>
+<tr>
+<td>401</td>
+<td>Auth failed</td>
+</tr>
+<tr>
+<td>403</td>
+<td>Access denied</td>
+</tr>
+<tr>
+<td>500</td>
+<td>Server error during auth</td>
+</tr>
+</tbody></table>
+<p>The client emits <code>connect_unauthorized</code>, <code>connect_forbidden</code>, or <code>connect_serverError</code> accordingly.</p>
+<h2>FalconFrame Integration</h2>
+<pre><code class="language-typescript">gl.falconFrame(app);                           // Serve client files + status endpoint
+gl.falconFrame(app, &quot;/path/to/client/dist&quot;);   // Custom client directory
+gl.falconFrame(app, false);                    // Disable client serving
 </code></pre>
-<h4><code>broadcast(event, ...args)</code></h4>
-<p>Broadcast an event to all connected clients.</p>
-<pre><code class="language-typescript">server.broadcast(event: string, ...args: any[])
+<p>This enables the status endpoint at <code>/gloves-link/status</code> and serves the browser client.</p>
+<h2>Binary Transport</h2>
+<p>By default, messages use JSON. Add <code>?type=bin</code> to the connection URL for binary transport. The binary format uses a delimiter (<code>\b</code> by default, configurable via <code>GLOVES_LINK_DELIMITER</code> env var) to separate event names, ack IDs, and data.</p>
+<h2>Server Methods</h2>
+<pre><code class="language-typescript">gl.broadcastRoom(&#39;room&#39;, &#39;event&#39;, ...args);    // Broadcast to room in root namespace
+gl.room(&#39;name&#39;);                               // Get/create room in root namespace
+gl.userRoom(&#39;user-123&#39;);                       // Get/create user room in root namespace
+gl.emitToUserId(&#39;user-123&#39;, &#39;event&#39;, ...args); // Emit to user across all namespaces
 </code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>event</code> (string): The event name to broadcast</li>
-<li><code>...args</code> (any[]): Optional data to send with the event</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-typescript">server.broadcast(&#39;notification&#39;, { message: &#39;Hello to all clients!&#39; });
-</code></pre>
-<h4><code>broadcastRoom(roomName, event, ...args)</code></h4>
-<p>Broadcast an event to all clients in a specific room.</p>
-<pre><code class="language-typescript">server.broadcastRoom(roomName: string, event: string, ...args: any[])
-</code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>roomName</code> (string): The name of the room to broadcast to</li>
-<li><code>event</code> (string): The event name to broadcast</li>
-<li><code>...args</code> (any[]): Optional data to send with the event</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-typescript">server.broadcastRoom(&#39;chat-room&#39;, &#39;message&#39;, { 
-    user: &#39;John&#39;, 
-    text: &#39;Hello everyone!&#39; 
-});
-</code></pre>
-<h4><code>broadcastWithoutSelf(socket, event, ...args)</code></h4>
-<p>Broadcast an event to all clients except the specified socket.</p>
-<pre><code class="language-typescript">server.broadcastWithoutSelf(socket: GLSocket, event: string, ...args: any[])
-</code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>socket</code> (GLSocket): The socket to exclude from the broadcast</li>
-<li><code>event</code> (string): The event name to broadcast</li>
-<li><code>...args</code> (any[]): Optional data to send with the event</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-typescript">server.onConnect((socket) =&gt; {
-    // Notify all other clients about the new connection
-    server.broadcastWithoutSelf(socket, &#39;userJoined&#39;, { 
-        userId: socket.id, 
-        message: &#39;A new user joined&#39; 
-    });
-});
-</code></pre>
-<h4><code>room(name)</code></h4>
-<p>Get or create a room by name.</p>
-<pre><code class="language-typescript">server.room(name: string): Room
-</code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>name</code> (string): The name of the room</li>
-</ul>
-<p><strong>Returns:</strong></p>
-<ul>
-<li><code>Room</code>: The room instance</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-typescript">const chatRoom = server.room(&#39;chat-room&#39;);
-chatRoom.onJoin((socket) =&gt; {
-    console.log(&#39;User joined chat room:&#39;, socket.id);
-});
-</code></pre>
-<h4><code>falconFrame(app, clientDir)</code></h4>
-<p>Integrate with FalconFrame for serving client files.</p>
-<pre><code class="language-typescript">server.falconFrame(app: FalconFrame, clientDir?: string)
-</code></pre>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>app</code> (FalconFrame): The FalconFrame application instance</li>
-<li><code>clientDir</code> (string, optional): Path to the client files directory</li>
-</ul>
-<h3>Authentication</h3>
-<p>GlovesLink supports custom authentication through the <code>authFn</code> option. This function is called for each new connection and should return <code>true</code> for successful authentication or <code>false</code> to reject the connection.</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-typescript">const glovesLink = new GlovesLinkServer({
-    server: httpServer,
-    authFn: async ({ headers, url, token }) =&gt; {
-        // Check token against database
-        if (token &amp;&amp; await validateToken(token)) {
-            return true;
-        }
-        return false;
-    }
-});
-</code></pre>
-<h3>Error Handling</h3>
-<p>GlovesLink handles several error cases automatically:</p>
-<ul>
-<li>401 Unauthorized: When authentication fails</li>
-<li>403 Forbidden: When access is denied</li>
-<li>500 Internal Server Error: When an unexpected error occurs during authentication</li>
-</ul>
-<p>These errors are communicated to the client through specific events.</p>
 
