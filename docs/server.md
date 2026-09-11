@@ -1,189 +1,114 @@
 # Server API
 
-The server-side API for GlovesLink provides functionality for managing WebSocket connections, handling events, and organizing clients into rooms.
+`GlovesLinkServer` manages WebSocket connections and namespaces.
 
-## Class: GlovesLinkServer
-
-### Constructor
+## Constructor
 
 ```typescript
-new GlovesLinkServer(opts: Partial<Server_Opts>)
+const server = new GlovesLinkServer(opts?: Partial<Server_Opts>)
 ```
-
-**Parameters:**
-
-- `opts` (Partial<Server_Opts>): Configuration options
-
-**Options:**
 
 ```typescript
 {
-    server: http.Server;                            // HTTP server instance (required)
-    logs?: boolean;                                 // Enable or disable logging (default: false)
-    authFn?: (data: Server_Auth_Opts) => boolean | Promise<boolean>; // Authentication function (default: () => true)
+    logs?: boolean;         // Enable logging (default: false)
+    statusTimeout?: number; // Socket status TTL in ms (default: 10000)
 }
 ```
 
-**Server_Auth_Opts:**
+## Attaching to HTTP Server
+
+```typescript
+const app = new FalconFrame();
+const httpServer = app.listen(3000);
+
+const gl = new GlovesLinkServer();
+gl.attachToHttpServer(httpServer);
+```
+
+## Namespaces
+
+Namespaces isolate sockets by URL path. Each has its own auth, handlers, and rooms.
+
+```typescript
+const rootNs = gl.of("/");
+const chatNs = gl.of("/chat");
+```
+
+Sockets connecting to `ws://host/chat` are routed to the `/chat` namespace. A 404 is returned if no namespace exists for the path.
+
+See [Namespace API](./namespace.md) for details.
+
+## Authentication
+
+Auth is configured per-namespace via `namespace.auth(authFn)`. The function receives connection data and returns a result:
+
+```typescript
+gl.of("/").auth(async ({ token, url, headers, request, socket, head, data }) => {
+    const user = await validateToken(token);
+    if (user) return { status: 200, user };
+    return { status: 401, msg: "Invalid token" };
+});
+```
+
+**AuthFnResult:**
+
 ```typescript
 {
-    headers: IncomingHttpHeaders;  // HTTP headers from the connection request
-    url: URL;                      // Parsed URL from the connection request
-    token?: string;                // Authentication token from URL parameters
+    status: number;             // 200 = success
+    user?: Record<string, any>; // Attached to socket.user
+    msg?: string;               // Error message for client
+    toSet?: Record<string, any> // Passed to connection handler
 }
 ```
 
-### Properties
+When `user` has an `_id`, the socket is automatically added to a user-specific room accessible via `server.userRoom(userId)`.
 
-- `wss`: WebSocketServer - The underlying WebSocket server
-- `logs`: boolean - Whether logging is enabled
-- `opts`: Server_Opts - Configuration options
-- `rooms`: Rooms - Map of room instances
-- `globalRoom`: Room - The global room containing all connected sockets
-
-### Methods
-
-#### `onConnect(handler)`
-
-Handle new client connections.
+**Server_Auth_Opts** (passed to authFn):
 
 ```typescript
-server.onConnect(handler: (socket: GLSocket) => void)
+{
+    headers: http.IncomingHttpHeaders;
+    url: URL;
+    token?: string;
+    request: http.IncomingMessage;
+    socket: Stream.Duplex;
+    head: Buffer;
+    data?: Record<string, any>;
+}
 ```
 
-**Parameters:**
-- `handler` (Function): The function to call when a new client connects
+## Error Handling
 
-**Example:**
-```typescript
-server.onConnect((socket) => {
-    console.log('New connection:', socket.id);
-    
-    socket.on('message', (data) => {
-        console.log('Received message:', data);
-    });
-});
-```
+GlovesLink handles errors automatically and communicates them to the client via the status endpoint:
 
-#### `broadcast(event, ...args)`
+| Status | Meaning |
+|--------|---------|
+| 404    | Namespace not found |
+| 401    | Auth failed |
+| 403    | Access denied |
+| 500    | Server error during auth |
 
-Broadcast an event to all connected clients.
+The client emits `connect_unauthorized`, `connect_forbidden`, or `connect_serverError` accordingly.
 
-```typescript
-server.broadcast(event: string, ...args: any[])
-```
-
-**Parameters:**
-- `event` (string): The event name to broadcast
-- `...args` (any[]): Optional data to send with the event
-
-**Example:**
-```typescript
-server.broadcast('notification', { message: 'Hello to all clients!' });
-```
-
-#### `broadcastRoom(roomName, event, ...args)`
-
-Broadcast an event to all clients in a specific room.
+## FalconFrame Integration
 
 ```typescript
-server.broadcastRoom(roomName: string, event: string, ...args: any[])
+gl.falconFrame(app);                           // Serve client files + status endpoint
+gl.falconFrame(app, "/path/to/client/dist");   // Custom client directory
+gl.falconFrame(app, false);                    // Disable client serving
 ```
 
-**Parameters:**
-- `roomName` (string): The name of the room to broadcast to
-- `event` (string): The event name to broadcast
-- `...args` (any[]): Optional data to send with the event
+This enables the status endpoint at `/gloves-link/status` and serves the browser client.
 
-**Example:**
-```typescript
-server.broadcastRoom('chat-room', 'message', { 
-    user: 'John', 
-    text: 'Hello everyone!' 
-});
-```
+## Binary Transport
 
-#### `broadcastWithoutSelf(socket, event, ...args)`
+By default, messages use JSON. Add `?type=bin` to the connection URL for binary transport. The binary format uses a delimiter (`\b` by default, configurable via `GLOVES_LINK_DELIMITER` env var) to separate event names, ack IDs, and data.
 
-Broadcast an event to all clients except the specified socket.
+## Server Methods
 
 ```typescript
-server.broadcastWithoutSelf(socket: GLSocket, event: string, ...args: any[])
+gl.broadcastRoom('room', 'event', ...args);    // Broadcast to room in root namespace
+gl.room('name');                               // Get/create room in root namespace
+gl.userRoom('user-123');                       // Get/create user room in root namespace
+gl.emitToUserId('user-123', 'event', ...args); // Emit to user across all namespaces
 ```
-
-**Parameters:**
-- `socket` (GLSocket): The socket to exclude from the broadcast
-- `event` (string): The event name to broadcast
-- `...args` (any[]): Optional data to send with the event
-
-**Example:**
-```typescript
-server.onConnect((socket) => {
-    // Notify all other clients about the new connection
-    server.broadcastWithoutSelf(socket, 'userJoined', { 
-        userId: socket.id, 
-        message: 'A new user joined' 
-    });
-});
-```
-
-#### `room(name)`
-
-Get or create a room by name.
-
-```typescript
-server.room(name: string): Room
-```
-
-**Parameters:**
-- `name` (string): The name of the room
-
-**Returns:**
-- `Room`: The room instance
-
-**Example:**
-```typescript
-const chatRoom = server.room('chat-room');
-chatRoom.onJoin((socket) => {
-    console.log('User joined chat room:', socket.id);
-});
-```
-
-#### `falconFrame(app, clientDir)`
-
-Integrate with FalconFrame for serving client files.
-
-```typescript
-server.falconFrame(app: FalconFrame, clientDir?: string)
-```
-
-**Parameters:**
-- `app` (FalconFrame): The FalconFrame application instance
-- `clientDir` (string, optional): Path to the client files directory
-
-### Authentication
-
-GlovesLink supports custom authentication through the `authFn` option. This function is called for each new connection and should return `true` for successful authentication or `false` to reject the connection.
-
-**Example:**
-```typescript
-const glovesLink = new GlovesLinkServer({
-    server: httpServer,
-    authFn: async ({ headers, url, token }) => {
-        // Check token against database
-        if (token && await validateToken(token)) {
-            return true;
-        }
-        return false;
-    }
-});
-```
-
-### Error Handling
-
-GlovesLink handles several error cases automatically:
-- 401 Unauthorized: When authentication fails
-- 403 Forbidden: When access is denied
-- 500 Internal Server Error: When an unexpected error occurs during authentication
-
-These errors are communicated to the client through specific events.

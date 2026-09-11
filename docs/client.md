@@ -1,130 +1,100 @@
 # Client API
 
-The client-side API for GlovesLink provides a simple interface for connecting to a WebSocket server and exchanging messages.
+Typed WebSocket client with auto-reconnection and acknowledgments.
 
-## Class: GlovesLinkClient
-
-### Constructor
+## Constructor
 
 ```typescript
-new GlovesLinkClient(url: string, opts?: Partial<GLC_Opts>)
+const client = new GlovesLinkClient<InputEvents, OutputEvents>(url, opts?);
 ```
 
-**Parameters:**
+```typescript
+interface ServerEvents {
+    message: (text: string) => void;
+}
 
-- `url` (string): The WebSocket server URL to connect to
-- `opts` (Partial<GLC_Opts>, optional): Configuration options
+interface ClientEvents {
+    sendMessage: (text: string) => void;
+}
 
-**Options:**
+const client = new GlovesLinkClient<ServerEvents, ClientEvents>('ws://localhost:3000');
+client.on('message', (text) => console.log(text));
+client.emit('sendMessage', 'Hello!');
+```
+
+## Options
 
 ```typescript
 {
-    reConnect?: boolean;        // Whether to automatically reconnect after disconnection (default: true)
-    reConnectInterval?: number; // Reconnection interval in milliseconds (default: 1000)
-    logs?: boolean;             // Enable or disable logging (default: false)
-    token?: string;             // Authentication token (default: null)
+    logs?: boolean;                  // Enable logging (default: false)
+    token?: string;                  // Auth token
+    autoConnect?: boolean;           // Connect on instantiation (default: true)
+    connectionData?: Record<string, any>; // Custom data sent via URL
+    statusPath?: string;             // Status endpoint path (default: "/gloves-link/status")
+    reConnect?: boolean;             // Auto-reconnect (default: true)
+    reConnectInterval?: number;      // Base interval in ms (default: 1000)
+    reConnectBackoffFactor?: number; // Backoff multiplier (default: 2)
+    maxReConnectAttempts?: number;   // Max attempts (default: 5)
+    maxReConnectDelay?: number;      // Max delay in ms (default: 15000)
 }
 ```
 
-### Properties
-
-- `ws`: WebSocket - The underlying WebSocket connection
-- `ackIdCounter`: number - Counter for tracking acknowledgment IDs
-- `ackCallbacks`: Map<number, Function> - Map of acknowledgment callbacks
-- `handlers`: { [key: string]: Function } - Event handlers
-- `opts`: GLC_Opts - Configuration options
-- `url`: URL - The parsed WebSocket URL
-
-### Methods
-
-#### `on(event, handler)`
-
-Listen for events from the server.
+## Methods
 
 ```typescript
-client.on(event: string, handler: (...args: any[]) => void | any)
+client.on('event', handler);       // Listen for event
+client.once('event', handler);     // Listen once
+client.emit('event', ...args);     // Send event
+client.send('event', ...args);     // Alias for emit
+client.connect();                  // Manual connect
+client.disconnect();               // Close + prevent reconnect
+client.close();                    // Close (reconnect still triggers)
+client.baseOn();                   // Log all built-in events
 ```
 
-**Parameters:**
-- `event` (string): The event name to listen for
-- `handler` (Function): The function to call when the event is received
-
-**Example:**
-```typescript
-client.on('message', (data) => {
-    console.log('Received message:', data);
-});
-```
-
-#### `emit(event, ...args)`
-
-Emit an event to the server with optional data.
+## Built-in Events
 
 ```typescript
-client.emit(event: string, ...args: any[])
+client.on('connect', (ws) => {});
+client.on('disconnect', (event) => {});
+client.on('error', (...err) => {});
+client.on('connect_unauthorized', (msg) => {});  // 401
+client.on('connect_forbidden', (msg) => {});     // 403
+client.on('connect_serverError', (msg) => {});   // 500
+client.on('reconnect_failed', () => {});
 ```
 
-**Parameters:**
-- `event` (string): The event name to emit
-- `...args` (any[]): Optional data to send with the event
+## Reconnection
 
-**Example:**
-```typescript
-client.emit('sendMessage', { text: 'Hello server!' });
-```
+Auto-reconnect uses exponential backoff with jitter:
 
-#### `send(event, ...args)`
+1. Delay = `reConnectInterval * reConnectBackoffFactor ^ (attempt - 1)`, capped at `maxReConnectDelay`
+2. Jitter: random factor (1.0-1.5)
+3. Stops after `maxReConnectAttempts`
 
-Alias for `emit`. Send an event to the server with optional data.
+On abnormal close (code 1006), the client checks the status endpoint first. If it returns 401/403/500, the client emits the corresponding event and does **not** reconnect.
 
-```typescript
-client.send(event: string, ...args: any[])
-```
+Events sent while disconnected are queued and flushed on reconnect.
 
-#### `close()`
+## Acknowledgments
 
-Close the WebSocket connection.
-
-```typescript
-client.close()
-```
-
-### Events
-
-The client can listen for the following built-in events:
-
-- `connect`: Emitted when the connection is established
-- `disconnect`: Emitted when the connection is closed
-- `error`: Emitted when an error occurs
-- `unauthorized`: Emitted when authentication fails with a 401 status
-- `forbidden`: Emitted when access is denied with a 403 status
-- `serverError`: Emitted when the server encounters an error with a 500 status
-
-**Example:**
-```typescript
-client.on('connect', () => {
-    console.log('Connected to server');
-});
-
-client.on('disconnect', () => {
-    console.log('Disconnected from server');
-});
-```
-
-### Acknowledgments
-
-GlovesLink supports acknowledgments for events. You can send a function as part of the data, and it will be called when the server responds.
-
-**Client-side:**
 ```typescript
 client.emit('getData', (response) => {
-    console.log('Server response:', response);
+    console.log('Server responded:', response);
 });
 ```
 
-**Server-side:**
+## Binary Transport
+
 ```typescript
-socket.on('getData', (cb) => {
-    cb({ message: 'Hello from server!' });
-});
+const client = new GlovesLinkClient('ws://localhost:3000?type=bin');
+```
+
+## Properties
+
+```typescript
+client.ws;         // Underlying WebSocket
+client.opts;       // Configuration
+client.url;        // Parsed URL
+client.connected;  // Connection status
 ```

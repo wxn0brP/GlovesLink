@@ -1,141 +1,65 @@
 # Socket API
 
-The GLSocket class represents an individual WebSocket connection on the server side. It provides methods for sending and receiving events, as well as managing room memberships.
+`GLSocket` represents a single WebSocket connection on the server side.
 
-## Class: GLSocket
-
-### Properties
-
-- `id`: string - Unique identifier for the socket
-- `ws`: WebSocket - The underlying WebSocket connection
-- `server`: GlovesLinkServer - Reference to the parent server instance
-- `rooms`: Set<string> - Set of room names the socket has joined
-- `ackIdCounter`: number - Counter for tracking acknowledgment IDs
-- `ackCallbacks`: Map<number, Function> - Map of acknowledgment callbacks
-- `logs`: boolean - Whether logging is enabled
-- `handlers`: { [key: string]: Function } - Event handlers
-
-### Methods
-
-#### `on(event, handler)`
-
-Listen for events from the client.
+## Events
 
 ```typescript
-socket.on(event: string, handler: (...args: any[]) => void | any)
+socket.on('message', (data) => { /* ... */ });
+socket.emit('response', { status: 'success' });
+socket.send('response', { status: 'success' }); // Alias for emit
 ```
 
-**Parameters:**
-- `event` (string): The event name to listen for
-- `handler` (Function): The function to call when the event is received
+## Rooms
 
-**Example:**
 ```typescript
-socket.on('message', (data) => {
-    console.log('Received message:', data);
-});
+socket.joinRoom('chat-room');      // Join by name
+socket.joinRoom(room);             // Join by Room instance
+socket.leaveRoom('chat-room');     // Leave room
+socket.leaveAllRooms();            // Leave all rooms
+socket.room('chat-room');          // Get room from namespace
+socket.userRoom();                 // Get user-specific room (based on user._id)
 ```
 
-#### `emit(event, ...args)`
-
-Emit an event to the client with optional data.
+## Disconnect
 
 ```typescript
-socket.emit(event: string, ...args: any[])
+socket.disconnect();
 ```
 
-**Parameters:**
-- `event` (string): The event name to emit
-- `...args` (any[]): Optional data to send with the event
+## User Data
 
-**Example:**
+When auth returns `user`, it is attached to the socket:
+
 ```typescript
-socket.emit('response', { status: 'success', data: 'Hello client!' });
+socket.user; // { _id: string, ... }
 ```
 
-#### `send(event, ...args)`
+If `user._id` exists, the socket is automatically added to a user room.
 
-Alias for `emit`. Send an event to the client with optional data.
+## Acknowledgments
 
-```typescript
-socket.send(event: string, ...args: any[])
-```
-
-#### `close()`
-
-Close the WebSocket connection.
+Pass a callback as the last argument to `emit` for request-response patterns:
 
 ```typescript
-socket.close()
-```
-
-#### `joinRoom(roomName)`
-
-Join a specific room.
-
-```typescript
-socket.joinRoom(roomName: string)
-```
-
-**Parameters:**
-- `roomName` (string): The name of the room to join
-
-**Example:**
-```typescript
-socket.on('joinChat', (roomName) => {
-    socket.joinRoom(roomName);
-    socket.emit('joined', { room: roomName });
-});
-```
-
-#### `leaveRoom(roomName)`
-
-Leave a specific room.
-
-```typescript
-socket.leaveRoom(roomName: string)
-```
-
-**Parameters:**
-- `roomName` (string): The name of the room to leave
-
-**Example:**
-```typescript
-socket.on('leaveChat', (roomName) => {
-    socket.leaveRoom(roomName);
-    socket.emit('left', { room: roomName });
-});
-```
-
-#### `leaveAllRooms()`
-
-Leave all joined rooms.
-
-```typescript
-socket.leaveAllRooms()
-```
-
-**Example:**
-```typescript
-socket.on('disconnect', () => {
-    socket.leaveAllRooms();
-});
-```
-
-### Acknowledgments
-
-Like the client, sockets support acknowledgments for events. You can send a function as part of the data, and it will be called when the client responds.
-
-**Server-side:**
-```typescript
+// Server
 socket.emit('getData', (response) => {
-    console.log('Client response:', response);
+    console.log('Client responded:', response);
+});
+
+// Client
+client.on('getData', (ack) => {
+    ack({ message: 'Hello!' });
 });
 ```
 
-**Client-side:**
-```javascript
-client.on('getData', (ack) => {
-    ack({ message: 'Hello from client!' });
-});
-```
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Unique socket ID |
+| `user` | `T` | User data from auth |
+| `namespacePath` | `string` | Namespace this socket belongs to |
+| `namespace` | `Namespace` | Parent namespace reference |
+| `rooms` | `Set<Room>` | Rooms this socket has joined |
+| `dataFormatType` | `"json" \| "bin"` | Message format |

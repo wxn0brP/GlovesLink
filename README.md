@@ -1,39 +1,58 @@
 # GlovesLink
 
-GlovesLink is a WebSocket communication library designed for seamless interaction between clients and servers.
+Typed WebSocket communication with namespaces, rooms, and rate limiting.
 
 [Main repo](https://github.com/wxn0brP/GlovesLink) |
 [Client repo](https://github.com/wxn0brP/GlovesLink-client) |
 [Server repo](https://github.com/wxn0brP/GlovesLink-server)
 
-## Features
-
-### General
-- **WebSocket Communication**: Establish real-time communication between clients and servers.
-- **Automatic Reconnection**: Automatically reconnects after disconnection.
-- **Authentication Support**: Token-based authentication for secure connections.
-- **Logging**: Optional logging for debugging and monitoring.
-- **Rooms**: Organize communication within specific rooms for better organization and control.
-
-### Communication
-- **Event Emission**: Send events with arbitrary data.
-- **Callbacks**: Handle server/client responses with callback functions.
-
-## Installation
+## Quickstart
 
 ```bash
-npm i @wxn0brp/gloves-link-server @wxn0brp/gloves-link-client @wxn0brp/falcon-frame
+bun add @wxn0brp/gloves-link-server @wxn0brp/gloves-link-client
 ```
 
-## API Reference
+**Server:**
 
-For detailed API documentation, see:
+```typescript
+import { GlovesLinkServer } from '@wxn0brp/gloves-link-server';
+import { FalconFrame } from '@wxn0brp/falcon-frame';
 
-- [Client API](./docs/client.md)
-- [Server API](./docs/server.md)
-- [Socket API](./docs/socket.md)
-- [Room API](./docs/room.md)
+const app = new FalconFrame();
+const httpServer = app.listen(3000);
+
+const gl = new GlovesLinkServer();
+gl.attachToHttpServer(httpServer);
+gl.falconFrame(app);
+
+gl.of("/").onConnect((socket) => {
+    socket.on('message', (text) => {
+        socket.emit('message', { user: socket.id, text });
+    });
+});
+```
+
+**Client:**
+
+```typescript
+import GlovesLinkClient from '@wxn0brp/gloves-link-client';
+
+const client = new GlovesLinkClient('ws://localhost:3000');
+
+client.on('connect', () => client.emit('message', 'Hello!'));
+client.on('message', (data) => console.log(`${data.user}: ${data.text}`));
+```
+
+## Docs
+
+- [Server API](./docs/server.md) - namespaces, auth, falconFrame integration
+- [Namespace API](./docs/namespace.md) - rooms, user rooms, scoped emits
+- [Socket API](./docs/socket.md) - events, rooms, acknowledgments
+- [Room API](./docs/room.md) - group messaging, join/leave hooks
+- [Client API](./docs/client.md) - connection, reconnection, typed events
+- [Examples](./docs/examples.md) - common patterns
+- [Limit API](./docs/limit.md) - rate limiting and validation
 
 ## License
 
-MIT License
+MIT
